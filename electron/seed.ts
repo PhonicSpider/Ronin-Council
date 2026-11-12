@@ -97,6 +97,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoNotes: true,
   useMock: false,
   hasApiKey: false,
+  vendorKeys: {},
+  vendorUrls: {},
+  modelTools: {},
 };
 
 /** Which agents each default channel starts with (Widow is added to every channel automatically). */

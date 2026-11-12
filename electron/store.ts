@@ -5,6 +5,7 @@ import {
   Agent, AgentStatus, Attachment, Category, Channel, ChannelKind, Message, Note, Notification, Settings, Snapshot,
   Spend, Tier, WIDOW_DM_ID, WIDOW_ID, Price,
 } from '../shared/types';
+import { cleanModelRef, isModelName, isVendorId, ModelRef, validBaseUrl, validLocalUrl, vendorInfo, VendorId } from '../shared/vendors';
 import { DEFAULT_CHANNELS, DEFAULT_SETTINGS, LEGACY_AGENT_IDS, SEED_AGENTS, seedCategories, widowDm } from './seed';
 
 interface Data {
@@ -22,6 +23,8 @@ interface Data {
 
 export interface NewAgent {
   name: string; role: string; specialty: string; personality: string; tier: Tier;
+  /** null clears an explicit model (back to the tier). */
+  model?: ModelRef | null;
   color?: string; image?: string; partnerId?: string;
 }
 
@@ -215,7 +218,7 @@ export class Store {
     return ch.memberIds.map((id) => this.agent(id)).filter((a): a is Agent => !!a);
   }
   modelFor(tier: Tier) { return this.data.settings.models[tier]; }
-  priceFor(model: string): Price { return this.data.settings.prices[model] ?? { in: 0, out: 0 }; }
+  priceFor(model: string): Price { return Object.hasOwn(this.data.settings.prices, model) ? this.data.settings.prices[model]! : { in: 0, out: 0 }; }
 
   // ---------- categories ----------
   createCategory(name: string): Category {
@@ -354,6 +357,7 @@ export class Store {
     const agent: Agent = {
       id: newId('agent'), name, role: input.role.trim() || 'Agent', specialty: input.specialty.trim(),
       personality: input.personality.trim(), tier: input.tier,
+      ...(input.model ? { model: cleanModelRef(input.model) } : {}),
       color: input.color ?? PALETTE[this.data.agents.length % PALETTE.length],
       image: input.image, partnerId: input.partnerId, status: 'idle',
     };
@@ -375,6 +379,7 @@ export class Store {
     if (patch.specialty !== undefined) a.specialty = patch.specialty;
     if (patch.personality !== undefined) a.personality = patch.personality;
     if (patch.tier !== undefined) a.tier = patch.tier;
+    if (patch.model !== undefined) a.model = patch.model ? cleanModelRef(patch.model) : undefined;
     if (patch.color !== undefined) a.color = patch.color;
     if (patch.image !== undefined) a.image = patch.image || undefined;
     if (patch.partnerId !== undefined) {
@@ -471,10 +476,42 @@ export class Store {
   }
 
   // ---------- settings / spend ----------
-  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey'>>) {
+  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys'>>) {
     const s = this.data.settings;
+    if (patch.vendorUrls) {
+      // Only the vendors whose address is the user's to set; a hosted vendor's address is fixed so its key cannot be redirected.
+      const next = { ...s.vendorUrls };
+      for (const [k, v] of Object.entries(patch.vendorUrls)) {
+        if (!isVendorId(k) || !vendorInfo(k).editableUrl) throw new Error('That vendor\'s address cannot be changed');
+        if (v === '' || v == null) { delete next[k]; continue; }
+        const clean = typeof v === 'string' ? (k === 'local' ? validLocalUrl(v) : validBaseUrl(v)) : null;
+        if (!clean) {
+          throw new Error(k === 'local'
+            ? 'A local server must be on this computer: use an address like http://localhost:11434/v1. For a remote service, use "Other (OpenAI-compatible)".'
+            : 'The address must start with https:// (or http:// for a server on this computer) and have no password or query in it');
+        }
+        next[k] = clean;
+      }
+      s.vendorUrls = next;
+    }
+    if (patch.modelTools) {
+      const next = { ...s.modelTools };
+      for (const [k, v] of Object.entries(patch.modelTools)) {
+        if (!isModelName(k) || typeof v !== 'boolean') throw new Error('Invalid model tool setting');
+        next[k] = v;
+      }
+      s.modelTools = next;
+    }
     if (patch.models) s.models = { ...s.models, ...patch.models };
-    if (patch.prices) s.prices = { ...s.prices, ...patch.prices };
+    if (patch.prices) {
+      const next = { ...s.prices };
+      for (const [k, v] of Object.entries(patch.prices)) {
+        const ok = isModelName(k) && !!v && typeof v === 'object' && Number.isFinite(v.in) && Number.isFinite(v.out) && v.in >= 0 && v.out >= 0;
+        if (!ok) throw new Error('Prices must be numbers of zero or more, for a valid model name');
+        next[k] = { in: v.in, out: v.out };
+      }
+      s.prices = next;
+    }
     const num = (v: unknown, min: number, max: number, fallback: number) =>
       typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
     if (patch.dailyBudgetUsd !== undefined) s.dailyBudgetUsd = num(patch.dailyBudgetUsd, 0, 10000, s.dailyBudgetUsd);
@@ -485,7 +522,15 @@ export class Store {
     this.changed();
   }
   setHasApiKey(v: boolean) {
+    if (this.data.settings.hasApiKey === v) return;
     this.data.settings.hasApiKey = v;
+    this.changed();
+  }
+  /** Which vendors have a key saved. Only the flags are kept here. */
+  setVendorKeys(flags: Partial<Record<VendorId, boolean>>) {
+    const a = JSON.stringify(this.data.settings.vendorKeys), b = JSON.stringify(flags);
+    if (a === b) return;
+    this.data.settings.vendorKeys = flags;
     this.changed();
   }
   setMode(m: 'claude' | 'mock') {
@@ -496,6 +541,7 @@ export class Store {
     if (this.data.spend.date !== t) this.data.spend = { date: t, usd: 0, byCategory: {} };
   }
   recordSpend(usd: number, categoryId: string | null) {
+    if (!Number.isFinite(usd) || usd < 0) return; // a bad figure must never poison the running total the budgets compare against
     this.rollSpend();
     this.data.spend.usd += usd;
     if (categoryId) this.data.spend.byCategory[categoryId] = (this.data.spend.byCategory[categoryId] ?? 0) + usd;

@@ -5,6 +5,10 @@ import { createApi } from './api';
 import { autoBackupIfDue } from './backup';
 import { Orchestrator } from './orchestrator';
 import { ClaudeProvider, MockProvider, Provider } from './providers';
+import { KeyVault } from './keys';
+import { OpenAIProvider } from './openai';
+import { RouterProvider } from './router';
+import { vendorInfo, VendorId } from '../shared/vendors';
 import { runSelfTest } from './selftest';
 import { Store } from './store';
 import { WIDOW_ID } from '../shared/types';
@@ -20,35 +24,45 @@ let win: BrowserWindow | null = null;
 function start() {
   const userData = app.getPath('userData');
   const dbFile = path.join(userData, 'council.json');
-  const secretFile = path.join(userData, 'api-key.bin');
   const defaultVaultRoot = path.join(userData, 'vaults');
   const store = new Store(dbFile);
   store.expireStaleApprovals(); // nothing is waiting on requests from a previous run
 
-  // ---- API key: encrypted with the OS keychain via safeStorage; never sent to the renderer ----
-  let apiKey: string | null = null;
-  let claude: ClaudeProvider | null = null;
+  // ---- API keys: one encrypted file per vendor via the OS keychain (safeStorage); never sent to the renderer ----
+  const keys = new KeyVault(userData, safeStorage);
   const mock = new MockProvider();
-  try {
-    if (fs.existsSync(secretFile) && safeStorage.isEncryptionAvailable()) {
-      apiKey = safeStorage.decryptString(fs.readFileSync(secretFile));
-    }
-  } catch { apiKey = null; }
+  const built = new Map<string, Provider>();
 
+  /** Live = at least one vendor is set up: a saved key, or an address for a local/custom server. */
   const refreshMode = () => {
-    const live = !!apiKey && !store.settings.useMock;
-    store.setHasApiKey(!!apiKey);
-    store.setMode(live ? 'claude' : 'mock');
+    const urls = store.settings.vendorUrls;
+    const configured = Object.keys(keys.flags()).length > 0 || !!urls.local || !!urls.custom;
+    store.setHasApiKey(keys.has('anthropic'));
+    store.setVendorKeys(keys.flags());
+    store.setMode(configured && !store.settings.useMock ? 'claude' : 'mock');
   };
   refreshMode();
 
+  /** The provider for one vendor. Throws a readable error when it is not set up, which reaches the chat as that agent's failure. */
+  const providerFor = (vendor: VendorId): Provider => {
+    const info = vendorInfo(vendor);
+    const key = keys.get(vendor);
+    if (info.needsKey && !key) throw new Error(`No API key for ${info.label}. Add one in Settings → API & Models, or pick another model for this agent.`);
+    const base = info.editableUrl ? store.settings.vendorUrls[vendor] || info.baseUrl : info.baseUrl;
+    if (info.api === 'openai' && !base) throw new Error(`No address set for ${info.label} (Settings → API & Models).`);
+    const id = `${vendor}|${base}|${key ?? ''}`;
+    let p = built.get(id);
+    if (!p) {
+      p = info.api === 'anthropic' ? new ClaudeProvider(key!) : new OpenAIProvider({ vendor, baseUrl: base, apiKey: key });
+      built.set(id, p);
+    }
+    return p;
+  };
+  const router = new RouterProvider(providerFor);
+
   const getProvider = (): Provider => {
     refreshMode();
-    if (store.mode === 'claude' && apiKey) {
-      claude ??= new ClaudeProvider(apiKey);
-      return claude;
-    }
-    return mock;
+    return store.mode === 'claude' ? router : mock;
   };
 
   const resolver = (cat: Parameters<typeof resolveVaultPath>[0]) => resolveVaultPath(cat, defaultVaultRoot);
@@ -90,17 +104,12 @@ function start() {
       userData, app.getPath('appData'), path.dirname(process.execPath), process.env.windir, process.env.ProgramFiles,
       process.env['ProgramFiles(x86)'], process.env.ProgramData,
     ],
-    setApiKey: (key) => {
-      if (!key) throw new Error('Enter an API key');
-      const weak = (safeStorage as { getSelectedStorageBackend?: () => string }).getSelectedStorageBackend?.() === 'basic_text';
-      if (!safeStorage.isEncryptionAvailable() || weak) throw new Error('Secure storage is not available on this system, so the key was not saved');
-      fs.mkdirSync(userData, { recursive: true });
-      fs.writeFileSync(secretFile, safeStorage.encryptString(key));
-      apiKey = key; claude = null;
-    },
-    clearApiKey: () => {
-      try { fs.rmSync(secretFile, { force: true }); } catch { /* ignore */ }
-      apiKey = null; claude = null;
+    setApiKey: (key, vendor) => keys.set(vendor, key),
+    clearApiKey: (vendor) => keys.clear(vendor),
+    listModels: async (vendor) => {
+      const p = providerFor(vendor);
+      if (!(p instanceof OpenAIProvider)) throw new Error('Model detection works for OpenAI-compatible vendors and local servers.');
+      return p.listModels();
     },
     pickFolder: async () => {
       if (!win) return null;

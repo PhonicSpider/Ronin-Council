@@ -3,12 +3,13 @@ import type { AgentStatus, Snapshot, Tier } from '../../shared/types';
 import { WIDOW_ID } from '../../shared/types';
 import { act } from '../api';
 import { Avatar } from './Avatar';
+import { ModelPicker } from './ModelPicker';
 import { AvatarEditor } from './AvatarEditor';
 
 const STATUS: Record<AgentStatus, string> = {
   idle: 'Idle', thinking: 'Thinking', reviewing: 'Reviewing', blocked: 'Blocked / waiting',
 };
-export const TIER_LABEL: Record<Tier, string> = { fast: 'Fast', standard: 'Standard', top: 'Top' };
+export { TIER_LABEL } from './ModelPicker';
 
 export function AgentPopup({ snap, agentId, onClose }: { snap: Snapshot; agentId: string; onClose: () => void }) {
   const agent = snap.agents.find((a) => a.id === agentId);
@@ -55,14 +56,9 @@ export function AgentPopup({ snap, agentId, onClose }: { snap: Snapshot; agentId
             <label>Name (used for @mentions)
               <input value={name} onChange={(e) => setName(e.target.value)} data-testid="agent-name" />
             </label>
-            <label>Model tier
-              <select value={agent.tier} onChange={(e) => void act('updateAgent', agent.id, { tier: e.target.value })}>
-                {(['fast', 'standard', 'top'] as Tier[]).map((t) => (
-                  <option key={t} value={t}>{TIER_LABEL[t]} — {snap.settings.models[t]}</option>
-                ))}
-              </select>
-            </label>
           </div>
+          <ModelPicker key={agent.id} settings={snap.settings} value={{ tier: agent.tier, model: agent.model ?? null }}
+            onChange={(v) => { if (!v.model || v.model.model) void act('updateAgent', agent.id, { tier: v.tier, model: v.model }); }} />
 
           <label>Specialty
             <textarea rows={2} value={specialty} onChange={(e) => setSpecialty(e.target.value)} />

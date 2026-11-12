@@ -353,3 +353,12 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--acce
 @keyframes msg-flash { 0%, 60% { background: rgba(190,255,90,.22); } 100% { background: transparent; } }
 .msg.flash, .tool-row.flash, .sys-msg.flash { animation: msg-flash 2.2s ease-out; border-radius: 10px; }
 @media (prefers-reduced-motion: reduce) { .msg.flash, .tool-row.flash, .sys-msg.flash { animation: none; background: rgba(190,255,90,.18); } }
+
+/* ---- providers and model picker ---- */
+.vendor-row { border: 1px solid var(--glass-line); background: var(--glass-hi); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.vendor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.vendor-state { font-size: 11px; color: var(--muted); border: 1px solid var(--glass-line); border-radius: 999px; padding: 1px 8px; }
+.vendor-state.on { color: #bfff5a; border-color: rgba(190,255,90,.45); }
+.model-picker { margin-bottom: 8px; }
+.model-note { margin: -2px 0 8px; display: flex; flex-direction: column; gap: 4px; }
+.warn-text { color: #f0b04a; }

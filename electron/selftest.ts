@@ -418,6 +418,59 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       check('clicking a result closes the bar, switches to that channel and highlights the message', !!jumped && after !== before, { before, after });
     });
 
+    await step('vendor and model: pick a different vendor per agent, and set up providers', async () => {
+      await js(`document.querySelector('.roster .rchip').click()`); // Widow
+      await waitFor(`__t.tid('agent-popup')`);
+      const startVendor = await js<string>(`__t.tid('agent-vendor').value`);
+      await js(`__t.setVal(__t.tid('agent-vendor'), 'openai')`);
+      const saved = await waitFor(`__t.tid('agent-model') && __t.tid('agent-model').value === 'gpt-5'`, 3000);
+      await wait(200);
+      const ref = store.agent('widow')?.model;
+      const note = await js<string>(`__t.tid('model-note')?.textContent || ''`);
+      await shot('32-vendor-model');
+      check('choosing OpenAI shows its models and saves the choice on the agent',
+        startVendor === 'anthropic' && saved && ref?.vendor === 'openai' && ref.model === 'gpt-5', { startVendor, ref });
+      check('the picker warns that prompts go to that vendor and that no key is saved yet',
+        /sent to this vendor/.test(note) && /No key saved for OpenAI/.test(note), note);
+      // A local model: the name box appears and the choice is saved once a valid name is typed.
+      await js(`__t.setVal(__t.tid('agent-vendor'), 'local')`);
+      await waitFor(`__t.tid('agent-model-name')`, 3000);
+      await js(`__t.setVal(__t.tid('agent-model-name'), 'llama3.1')`);
+      await wait(1000); // the name saves after a short pause
+      const local = store.agent('widow')?.model;
+      const toolsOff = await js<boolean>(`__t.tid('model-tools').checked === false`);
+      check('a local model can be typed in, is saved, and starts with tools off', local?.vendor === 'local' && local.model === 'llama3.1' && toolsOff, { local, toolsOff });
+      // Back to Anthropic restores the tier behaviour.
+      await js(`__t.setVal(__t.tid('agent-vendor'), 'anthropic')`);
+      await wait(300);
+      check('switching back to Anthropic clears the explicit model', store.agent('widow')?.model === undefined);
+      await js(`__t.tid('agent-popup').querySelector('.close').click()`);
+      await waitFor(`!__t.tid('agent-popup')`, 2000);
+
+      // Providers in Settings: every vendor has a row; a local address is validated and saved.
+      await js(`__t.tid('open-settings').click()`);
+      await waitFor(`__t.tid('settings')`, 3000);
+      await js(`__t.tid('settings-tab-api').click()`);
+      await waitFor(`__t.tid('vendor-local')`, 3000);
+      const rows = await js<number>(`document.querySelectorAll('[data-testid^="vendor-"][data-testid$="anthropic"], [data-testid="vendor-openai"], [data-testid="vendor-google"], [data-testid="vendor-xai"], [data-testid="vendor-deepseek"], [data-testid="vendor-local"], [data-testid="vendor-custom"]').length`);
+      check('API & Models lists Anthropic, OpenAI, Google, xAI, DeepSeek, local and custom', rows === 7, rows);
+      await js(`__t.setVal(__t.tid('vendor-url-local'), 'http://example.com/v1')`);
+      await js(`__t.tid('vendor-url-save-local').click()`);
+      await wait(400);
+      check('an insecure address is refused and nothing is saved', store.settings.vendorUrls.local === undefined, store.settings.vendorUrls);
+      await js(`__t.setVal(__t.tid('vendor-url-local'), 'http://localhost:11434/v1')`);
+      await js(`__t.tid('vendor-url-save-local').click()`);
+      await wait(400);
+      check('a localhost address is saved', store.settings.vendorUrls.local === 'http://localhost:11434/v1', store.settings.vendorUrls);
+      await shot('33-providers');
+      await js(`__t.setVal(__t.tid('vendor-url-local'), '')`);
+      await js(`__t.tid('vendor-url-save-local').click()`); // leave the test data as it was (and mock mode on)
+      await wait(300);
+      await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+      await waitFor(`!__t.tid('settings')`, 2000);
+      check('clearing the address returns to mock mode', store.settings.vendorUrls.local === undefined && store.mode === 'mock');
+    });
+
     await step('agent profile popup', async () => {
       await js(`document.querySelector('.roster .rchip').click()`);
       const open = await waitFor(`__t.tid('agent-popup')`);

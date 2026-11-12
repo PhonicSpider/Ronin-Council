@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { Category, ChannelKind, Tier } from '../shared/types';
+import { cleanModelRef, isVendorId, VendorId } from '../shared/vendors';
 import { ingestAttachments, normalizeRepoUrl, validateAvatar } from './attachments';
 import { createBackup, listBackups, restoreBackup } from './backup';
 import { Orchestrator } from './orchestrator';
@@ -12,8 +13,10 @@ export interface ApiContext {
   orch: Orchestrator;
   defaultVaultRoot: string;
   pickFolder(): Promise<string | null>;
-  setApiKey(key: string): void;
-  clearApiKey(): void;
+  setApiKey(key: string, vendor: VendorId): void;
+  clearApiKey(vendor: VendorId): void;
+  /** Models a local or OpenAI-compatible server offers. */
+  listModels(vendor: VendorId): Promise<string[]>;
   refreshMode(): void;
   /** True only in development runs; enables the fake permission request. */
   devTools: boolean;
@@ -29,6 +32,12 @@ const str = (v: unknown): string => {
 };
 const num = (v: unknown): number => {
   if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('Invalid argument');
+  return v;
+};
+/** The vendor an API call is about; older callers omit it and mean Anthropic. */
+const vendorArg = (v: unknown): VendorId => {
+  if (v === undefined) return 'anthropic';
+  if (!isVendorId(v)) throw new Error('Unknown vendor');
   return v;
 };
 const obj = (v: unknown): Record<string, unknown> => {
@@ -89,6 +98,7 @@ export function createApi(c: ApiContext) {
       const a: NewAgent = {
         name: str(i.name), role: str(i.role ?? ''), specialty: str(i.specialty ?? ''),
         personality: str(i.personality ?? ''), tier,
+        ...(i.model ? { model: cleanModelRef(i.model) } : {}),
         image: typeof i.image === 'string' && i.image ? validateAvatar(i.image) : undefined,
         partnerId: typeof i.partnerId === 'string' && i.partnerId ? i.partnerId : undefined,
       };
@@ -100,6 +110,7 @@ export function createApi(c: ApiContext) {
       for (const k of ['name', 'role', 'specialty', 'personality', 'image', 'partnerId', 'color'] as const) {
         if (p[k] !== undefined) out[k] = k === 'image' ? validateAvatar(str(p[k])) : str(p[k]);
       }
+      if (p.model !== undefined) out.model = p.model === null ? null : cleanModelRef(p.model);
       if (p.tier !== undefined) {
         const t = str(p.tier) as Tier;
         if (!['fast', 'standard', 'top'].includes(t)) throw new Error('Invalid tier');
@@ -165,8 +176,9 @@ export function createApi(c: ApiContext) {
       store.updateSettings(p as never);
       c.refreshMode();
     },
-    setApiKey: (key: unknown) => { c.setApiKey(str(key).trim()); c.refreshMode(); return true; },
-    clearApiKey: () => { c.clearApiKey(); c.refreshMode(); return true; },
+    setApiKey: (key: unknown, vendor?: unknown) => { c.setApiKey(str(key).trim(), vendorArg(vendor)); c.refreshMode(); return true; },
+    clearApiKey: (vendor?: unknown) => { c.clearApiKey(vendorArg(vendor)); c.refreshMode(); return true; },
+    listVendorModels: (vendor: unknown) => c.listModels(vendorArg(vendor)),
 
     pickFolder: () => c.pickFolder(),
 

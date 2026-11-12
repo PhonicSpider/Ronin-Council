@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { Category, Snapshot, Tier } from '../../shared/types';
 import { MODEL_CHOICES, WIDOW_ID } from '../../shared/types';
+import { LOCAL_PRESETS, VENDORS, type VendorInfo } from '../../shared/vendors';
 import { act, toast } from '../api';
 import { fmtSize } from '../attach';
 import { setSpeakEnabled } from '../speak';
 import { usd } from '../util';
 import { Avatar } from './Avatar';
 import { AvatarEditor } from './AvatarEditor';
-import { TIER_LABEL } from './AgentPopup';
+import { TIER_LABEL, modelLabel, ModelPicker, type PickerValue } from './ModelPicker';
 
 export type Tab = 'agents' | 'api' | 'budgets' | 'vaults' | 'backup' | 'testing';
 const TABS: [Tab, string][] = [
@@ -33,7 +34,7 @@ function NumberField({ value, onCommit, step = 1, prefix, testid }: {
 }
 
 function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: string) => void }) {
-  const empty = { name: '', role: '', tier: 'standard' as Tier, partnerId: '', specialty: '', personality: '', image: '' };
+  const empty = { name: '', role: '', tier: 'standard' as Tier, model: null as PickerValue['model'], partnerId: '', specialty: '', personality: '', image: '' };
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(false);
   const [speak, setSpeak] = useState(() => { try { return localStorage.getItem('rc.speak') !== '0'; } catch { return true; } });
@@ -54,7 +55,7 @@ function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: st
               <Avatar agent={a} size={34} status={a.status} />
               <div className="agent-row-main">
                 <strong>{a.name}</strong> <span className="muted">{a.role}</span>
-                <div className="muted small">{TIER_LABEL[a.tier]} · partner: {partner?.name ?? 'Widow reviews'}</div>
+                <div className="muted small">{modelLabel(a, snap.settings)} · partner: {partner?.name ?? 'Widow reviews'}</div>
               </div>
               <button className="btn sm" onClick={() => onOpenAgent(a.id)}>Profile</button>
               <button className="btn sm danger" disabled={a.id === WIDOW_ID} title={a.id === WIDOW_ID ? 'Widow cannot be removed' : 'Remove'}
@@ -73,11 +74,6 @@ function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: st
           <label>Role<input value={form.role} onChange={(e) => set('role', e.target.value)} data-testid="new-agent-role" /></label>
         </div>
         <div className="field-row">
-          <label>Model tier
-            <select value={form.tier} onChange={(e) => set('tier', e.target.value as Tier)}>
-              {(['fast', 'standard', 'top'] as Tier[]).map((t) => <option key={t} value={t}>{TIER_LABEL[t]} — {snap.settings.models[t]}</option>)}
-            </select>
-          </label>
           <label>Audit partner
             <select value={form.partnerId} onChange={(e) => set('partnerId', e.target.value)}>
               <option value="">None (Widow reviews)</option>
@@ -85,6 +81,8 @@ function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: st
             </select>
           </label>
         </div>
+        <ModelPicker settings={snap.settings} value={{ tier: form.tier, model: form.model }}
+          onChange={(v) => setForm((f) => ({ ...f, tier: v.tier, model: v.model }))} />
         <label>Specialty<textarea rows={2} value={form.specialty} onChange={(e) => set('specialty', e.target.value)} /></label>
         <label>Personality<textarea rows={3} value={form.personality} onChange={(e) => set('personality', e.target.value)} /></label>
         <div className="form-actions">
@@ -93,7 +91,7 @@ function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: st
             {form.image ? 'Change picture…' : 'Add picture…'}
           </button>
           {form.image && <button className="btn" onClick={() => set('image', '')}>Remove</button>}
-          <button className="btn primary" data-testid="add-agent" onClick={async () => {
+          <button className="btn primary" data-testid="add-agent" disabled={!!form.model && !form.model.model} onClick={async () => {
             const a = await act('addAgent', form);
             if (a) { setForm(empty); toast('Agent added. Add them to channels from their profile or a channel’s Members menu.'); }
           }}>Add agent</button>
@@ -106,31 +104,69 @@ function AgentsTab({ snap, onOpenAgent }: { snap: Snapshot; onOpenAgent: (id: st
   );
 }
 
-function ApiTab({ snap }: { snap: Snapshot }) {
-  const [key, setKey] = useState('');
+function VendorRow({ snap, v }: { snap: Snapshot; v: VendorInfo }) {
   const s = snap.settings;
-  const models = Array.from(new Set([...MODEL_CHOICES, ...Object.values(s.models), ...Object.keys(s.prices)]));
+  const [key, setKey] = useState('');
+  const saved = !!s.vendorKeys[v.id];
+  const stored = s.vendorUrls[v.id] ?? '';
+  const [url, setUrl] = useState(stored || v.baseUrl);
+  useEffect(() => setUrl(stored || v.baseUrl), [stored, v.baseUrl]);
+  const id = v.id === 'anthropic' ? 'api-key' : `api-key-${v.id}`;
+  return (
+    <div className="vendor-row" data-testid={`vendor-${v.id}`}>
+      <div className="vendor-head">
+        <strong>{v.label}</strong>
+        <span className={`vendor-state ${saved || (v.editableUrl && stored) ? 'on' : ''}`}>
+          {v.needsKey ? (saved ? 'key saved' : 'no key') : stored ? 'address set' : 'not set up'}
+        </span>
+      </div>
+      <div className="muted small">{v.note}</div>
+      {v.needsKey && (
+        <div className="field-row">
+          <label>API key
+            <input type="password" value={key} data-testid={id} autoComplete="off"
+              placeholder={saved ? '•••••••• (saved, enter a new one to replace)' : v.id === 'anthropic' ? 'sk-ant-…' : 'paste key'}
+              onChange={(e) => setKey(e.target.value)} />
+          </label>
+          <div className="form-actions end">
+            <button className="btn primary" disabled={!key.trim()} data-testid={`${id}-save`} onClick={async () => {
+              if (await act('setApiKey', key, v.id)) { setKey(''); toast(`${v.label} key saved.`); }
+            }}>Save key</button>
+            <button className="btn danger" disabled={!saved} onClick={() => void act('clearApiKey', v.id)}>Remove key</button>
+          </div>
+        </div>
+      )}
+      {v.editableUrl && (
+        <div className="field-row">
+          <label>Address
+            <input value={url} data-testid={`vendor-url-${v.id}`} placeholder="https://…/v1" onChange={(e) => setUrl(e.target.value)} />
+          </label>
+          <div className="form-actions end">
+            {v.id === 'local' && LOCAL_PRESETS.map((p) => <button key={p.label} className="btn sm" type="button" onClick={() => setUrl(p.url)}>{p.label}</button>)}
+            <button className="btn primary" data-testid={`vendor-url-save-${v.id}`} onClick={async () => {
+              if (await act('updateSettings', { vendorUrls: { [v.id]: url.trim() } })) toast(url.trim() ? 'Address saved.' : 'Address cleared.');
+            }}>Save address</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApiTab({ snap }: { snap: Snapshot }) {
+  const s = snap.settings;
+  const agentModels = snap.agents.filter((a) => a.model && a.model.vendor !== 'local').map((a) => a.model!.model);
+  const models = Array.from(new Set([...MODEL_CHOICES, ...Object.values(s.models), ...Object.keys(s.prices), ...agentModels]));
   return (
     <div>
-      <h3>Anthropic API</h3>
+      <h3>Providers</h3>
       <div className={`status-line ${snap.mode}`} data-testid="mode-status">
         {snap.mode === 'claude'
-          ? 'Live: agents use the Claude API with your key.'
-          : s.hasApiKey ? 'Mock mode: a key is saved but "use mock agents" is on.' : 'Mock mode: no API key saved yet. Replies are simulated and free.'}
+          ? 'Live: agents call the vendors set up below. Each agent\'s vendor and model is chosen in its profile.'
+          : Object.keys(s.vendorKeys).length ? 'Mock mode: a key is saved but "use mock agents" is on.' : 'Mock mode: no key saved yet. Replies are simulated and free.'}
       </div>
-      <div className="field-row">
-        <label>API key
-          <input type="password" value={key} placeholder={s.hasApiKey ? '•••••••• (saved — enter a new one to replace)' : 'sk-ant-…'}
-            onChange={(e) => setKey(e.target.value)} autoComplete="off" data-testid="api-key" />
-        </label>
-        <div className="form-actions end">
-          <button className="btn primary" disabled={!key.trim()} onClick={async () => {
-            if (await act('setApiKey', key)) { setKey(''); toast('API key saved.'); }
-          }}>Save key</button>
-          <button className="btn danger" disabled={!s.hasApiKey} onClick={() => void act('clearApiKey')}>Remove key</button>
-        </div>
-      </div>
-      <div className="muted small">The key is encrypted with your operating system's secure storage and stays in the main process; the interface never receives it.</div>
+      {VENDORS.map((v) => <VendorRow key={v.id} snap={snap} v={v} />)}
+      <div className="muted small">Keys are encrypted with your operating system's secure storage and stay in the main process; the interface never receives them. Each agent's prompts go only to the vendor you pick for that agent.</div>
       <label className="check big">
         <input type="checkbox" checked={s.useMock} onChange={(e) => void act('updateSettings', { useMock: e.target.checked })} />
         Use mock agents even if a key is saved (for testing the interface for free)
@@ -146,7 +182,7 @@ function ApiTab({ snap }: { snap: Snapshot }) {
         </div>
       ))}
 
-      <h3>Prices <span className="muted small">USD per 1M tokens — estimates, used only for the budget meter</span></h3>
+      <h3>Prices <span className="muted small">USD per 1M tokens, estimates used only for the budget meter. Local models are free and need no price.</span></h3>
       <div className="price-grid">
         <div className="price-row head"><span className="muted">Model</span><span className="muted">Input</span><span className="muted">Output</span></div>
         {models.map((m) => (
@@ -159,7 +195,7 @@ function ApiTab({ snap }: { snap: Snapshot }) {
           </div>
         ))}
       </div>
-      <div className="muted small">Check Anthropic's pricing page before relying on these. Cached input is billed at its own lower rate, using the multipliers for each model family.</div>
+      <div className="muted small">Check each vendor's pricing page before relying on these. A hosted model with no price is refused, so spend cannot go untracked. Cached input is billed at its own lower rate, using the multipliers for each model family.</div>
     </div>
   );
 }

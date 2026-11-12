@@ -11,6 +11,7 @@ A desktop chat app where you talk to a team of Claude agents. It looks like Disc
 - **Teams.** In a category's #general, `@security` or `@design` sends that team off to work in its own channel and report back. Each team starts by stating what "done" means and checks itself against it at the end.
 - **Real work on real files.** Point a category at a project folder and agents can read it, and ask to edit files or run commands. Every change shows you the exact diff or command and waits for your approval. Nothing runs before you click Approve.
 - **Second opinions.** Deliverables are reviewed by a partner agent, and Widow decides what reaches you.
+- **Any vendor, per agent.** Each agent picks its own vendor and model, so an OpenAI model can audit a Claude one, or the other way round. Anthropic, OpenAI, Google Gemini, xAI Grok and DeepSeek are built in. Local models (Ollama, LM Studio) and any OpenAI-compatible service such as OpenRouter work too. See [docs/multi-vendor.md](docs/multi-vendor.md).
 - **Notes and vaults.** The librarian writes notes for each channel into an Obsidian-style folder that every agent can read.
 - **Search.** The magnifier at the top left (or Ctrl+F) searches every chat and jumps to the message.
 - **Cost controls.** Daily and per-category budgets, a turn cap, loop detection, and a Stop all button.
@@ -33,7 +34,9 @@ npm install
 npm start
 ```
 
-With no API key the app runs in Mock mode: agents give canned replies and nothing is billed, but every feature still works. To use the real agents, open Settings, then API & Models, and paste an Anthropic key. The key is encrypted with Windows secure storage and kept outside this folder. It is never sent to the interface or written to the repository.
+With no API key the app runs in Mock mode: agents give canned replies and nothing is billed, but every feature still works. To use the real agents, open Settings, then API & Models, and paste a key for each vendor you want to use (Anthropic is the default for every agent). Keys are encrypted with Windows secure storage and kept outside this folder. They are never sent to the interface or written to the repository.
+
+To give an agent another model, click its portrait, then pick a vendor and a model. Local models need no key: choose "Open source (local)" under API & Models, set the server address, then type the model name.
 
 If `npm install` leaves Electron without its binary, see the install note in [docs/details.md](docs/details.md).
 

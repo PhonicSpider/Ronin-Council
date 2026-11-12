@@ -1,4 +1,6 @@
 // Types shared by the Electron main process and the React renderer.
+import type { ModelRef, VendorId } from './vendors';
+export type { ModelRef, VendorId } from './vendors';
 
 export const USER_ID = 'user';
 export const SYSTEM_ID = 'system';
@@ -16,6 +18,8 @@ export interface Agent {
   specialty: string;
   personality: string;
   tier: Tier;
+  /** An explicit vendor and model. Absent = use the tier's model (Anthropic). */
+  model?: ModelRef;
   color: string;
   image?: string; // data URL
   partnerId?: string; // audit partner
@@ -133,6 +137,12 @@ export interface Settings {
   autoNotes: boolean;
   useMock: boolean;
   hasApiKey: boolean;
+  /** Which vendors have a key saved (a flag only; the keys never leave the main process). */
+  vendorKeys: Partial<Record<VendorId, boolean>>;
+  /** Addresses for the vendors whose address the user sets (local, custom). */
+  vendorUrls: Partial<Record<VendorId, string>>;
+  /** Per model id: may it use tools? Absent = the vendor's default. */
+  modelTools: Record<string, boolean>;
 }
 
 export interface Spend {

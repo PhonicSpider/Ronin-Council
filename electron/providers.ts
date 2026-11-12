@@ -1,7 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { VendorId } from '../shared/vendors';
 
 export interface CompleteRequest {
   model: string;
+  /** Whose API serves this model. Absent = Anthropic. */
+  vendor?: VendorId;
   system: string;
   prompt: string;
   maxTokens: number;
@@ -31,6 +34,7 @@ export interface ContentBlock { type: string; [key: string]: unknown }
 export interface Turn { role: 'user' | 'assistant'; content: string | ContentBlock[] }
 export interface StepRequest {
   model: string;
+  vendor?: VendorId;
   system: string;
   messages: Turn[];
   tools: ToolSchema[];
@@ -263,7 +267,9 @@ export function withTailCache(messages: Turn[]): Turn[] {
 }
 
 /** Cache price multipliers on the base input price (reads are cheaper on the newer models; writes are 1.25x for 5 minutes, 2x for 1 hour). */
-export function cachePrices(model: string) {
+export function cachePrices(model: string, vendor: VendorId = 'anthropic') {
+  // Other vendors cache differently (and often automatically); a flat 50% read rate with no write premium never under-counts much.
+  if (vendor !== 'anthropic') return { read: 0.5, write5m: 1, write1h: 1 };
   const read = /fable|mythos/.test(model) ? 0.025 : /opus-5-5|sonnet-5-5/.test(model) ? 0.05 : 0.1;
   return { read, write5m: 1.25, write1h: 2 };
 }
