@@ -1,0 +1,32 @@
+# dependencies and build output
+node_modules/
+dist/
+dist-electron/
+*.tsbuildinfo
+
+# local data, test runs and logs (self-test data can hold chats, backups and paths)
+.selftest/
+.selftest-data/
+.npm-install.log
+*.log
+
+# secrets: never commit these
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets*
+*.token
+api-key*
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# design source file (large, not needed to build)
+assets/Council.af

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#262a36"/>
+      <stop offset="1" stop-color="#0a0b0f"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1f3f7"/>
+      <stop offset="1" stop-color="#8a909c"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff3b3b"/>
+      <stop offset="1" stop-color="#a30f1a"/>
+    </linearGradient>
+    <clipPath id="disc"><circle cx="128" cy="128" r="122"/></clipPath>
+  </defs>
+
+  <circle cx="128" cy="128" r="124" fill="url(#bg)"/>
+  <g clip-path="url(#disc)">
+    <!-- sunrise disc behind the citadel (red cap of the Citadel mark) -->
+    <circle cx="128" cy="92" r="84" fill="url(#red)"/>
+    <!-- server-manager petals -->
+    <g transform="translate(128 206)">
+      <ellipse cx="-70" cy="-8" rx="56" ry="19" transform="rotate(-24 -70 -8)" fill="#b3121f"/>
+      <ellipse cx="70" cy="-8" rx="56" ry="19" transform="rotate(24 70 -8)" fill="#b3121f"/>
+      <ellipse cx="-70" cy="-3" rx="56" ry="9" transform="rotate(-24 -70 -3)" fill="#0b0c10" opacity=".55"/>
+      <ellipse cx="70" cy="-3" rx="56" ry="9" transform="rotate(24 70 -3)" fill="#0b0c10" opacity=".55"/>
+    </g>
+    <!-- citadel: keep and flanking towers, crenellated -->
+    <path fill="#0b0c10" d="M92 118V52h8v-8h8v8h8V30h8v-8h8v8h8v22h8v-8h8v8h8v66z"/>
+    <path fill="#0b0c10" d="M62 130V74h8v-8h8v8h8v-8h8v8h6v56zM194 130V74h-8v-8h-8v8h-8v-8h-8v8h-6v56z"/>
+    <!-- banner -->
+    <path fill="url(#red)" d="M122 30h12v28l-6-6-6 6z"/>
+  </g>
+
+  <!-- kabuto: horns -->
+  <path fill="url(#steel)" d="M126 150c-14-4-30-16-40-36-8-16-12-30-10-44 8 14 18 26 34 36 8 5 14 9 18 12z"/>
+  <path fill="url(#steel)" d="M130 150c14-4 30-16 40-36 8-16 12-30 10-44-8 14-18 26-34 36-8 5-14 9-18 12z"/>
+  <!-- helmet dome and mempo (face guard) -->
+  <path fill="#14161c" stroke="#d9dce3" stroke-width="3" stroke-linejoin="round" d="M84 138c0-26 20-42 44-42s44 16 44 42l-10 40-34 36-34-36z"/>
+  <path fill="#0b0c10" stroke="#d9dce3" stroke-width="2" stroke-linejoin="round" d="M92 150h72l-8 26-28 28-28-28z"/>
+  <!-- maedate crest / eye of the helm -->
+  <circle cx="128" cy="124" r="10" fill="none" stroke="#ff3b3b" stroke-width="4"/>
+  <circle cx="128" cy="124" r="3.5" fill="#ff3b3b"/>
+  <path fill="#d9dce3" d="M126 96h4l2 22h-8z"/>
+  <!-- eyes -->
+  <path fill="#35d5ff" d="M98 156l24 6-2 8-26-8z"/>
+  <path fill="#35d5ff" d="M158 156l-24 6 2 8 26-8z"/>
+  <!-- steel chevron and chin blade -->
+  <path fill="url(#steel)" d="M128 178l-14 14 14 18 14-18z"/>
+  <!-- side tassets (red lacing) -->
+  <path fill="url(#red)" d="M84 150l10 6-6 30-16-16zM172 150l-10 6 6 30 16-16z"/>
+
+  <circle cx="128" cy="128" r="122" fill="none" stroke="#e8e9ee" stroke-opacity=".9" stroke-width="3"/>
+</svg>
