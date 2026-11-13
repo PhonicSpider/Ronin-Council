@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { Category, ChannelKind, Tier } from '../shared/types';
-import { cleanModelRef, isVendorId, VendorId } from '../shared/vendors';
+import { isAbility } from '../shared/meshy';
+import { cleanModelRef, isKeyId, isVendorId, KeyId, VendorId } from '../shared/vendors';
 import { ingestAttachments, normalizeRepoUrl, validateAvatar } from './attachments';
 import { createBackup, listBackups, restoreBackup } from './backup';
 import { Orchestrator } from './orchestrator';
@@ -13,8 +14,8 @@ export interface ApiContext {
   orch: Orchestrator;
   defaultVaultRoot: string;
   pickFolder(): Promise<string | null>;
-  setApiKey(key: string, vendor: VendorId): void;
-  clearApiKey(vendor: VendorId): void;
+  setApiKey(key: string, vendor: KeyId): void;
+  clearApiKey(vendor: KeyId): void;
   /** Models a local or OpenAI-compatible server offers. */
   listModels(vendor: VendorId): Promise<string[]>;
   refreshMode(): void;
@@ -39,6 +40,16 @@ const vendorArg = (v: unknown): VendorId => {
   if (v === undefined) return 'anthropic';
   if (!isVendorId(v)) throw new Error('Unknown vendor');
   return v;
+};
+/** Like vendorArg, but a key may also belong to Meshy. */
+const keyArg = (v: unknown): KeyId => {
+  if (v === undefined) return 'anthropic';
+  if (!isKeyId(v)) throw new Error('Unknown vendor');
+  return v;
+};
+const abilitiesArg = (v: unknown): string[] => {
+  if (!Array.isArray(v) || !v.every(isAbility)) throw new Error('Unknown ability');
+  return v as string[];
 };
 const obj = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Invalid argument');
@@ -99,6 +110,7 @@ export function createApi(c: ApiContext) {
         name: str(i.name), role: str(i.role ?? ''), specialty: str(i.specialty ?? ''),
         personality: str(i.personality ?? ''), tier,
         ...(i.model ? { model: cleanModelRef(i.model) } : {}),
+        ...(i.abilities !== undefined ? { abilities: abilitiesArg(i.abilities) } : {}),
         image: typeof i.image === 'string' && i.image ? validateAvatar(i.image) : undefined,
         partnerId: typeof i.partnerId === 'string' && i.partnerId ? i.partnerId : undefined,
       };
@@ -110,6 +122,7 @@ export function createApi(c: ApiContext) {
       for (const k of ['name', 'role', 'specialty', 'personality', 'image', 'partnerId', 'color'] as const) {
         if (p[k] !== undefined) out[k] = k === 'image' ? validateAvatar(str(p[k])) : str(p[k]);
       }
+      if (p.abilities !== undefined) out.abilities = abilitiesArg(p.abilities);
       if (p.model !== undefined) out.model = p.model === null ? null : cleanModelRef(p.model);
       if (p.tier !== undefined) {
         const t = str(p.tier) as Tier;
@@ -176,8 +189,8 @@ export function createApi(c: ApiContext) {
       store.updateSettings(p as never);
       c.refreshMode();
     },
-    setApiKey: (key: unknown, vendor?: unknown) => { c.setApiKey(str(key).trim(), vendorArg(vendor)); c.refreshMode(); return true; },
-    clearApiKey: (vendor?: unknown) => { c.clearApiKey(vendorArg(vendor)); c.refreshMode(); return true; },
+    setApiKey: (key: unknown, vendor?: unknown) => { c.setApiKey(str(key).trim(), keyArg(vendor)); c.refreshMode(); return true; },
+    clearApiKey: (vendor?: unknown) => { c.clearApiKey(keyArg(vendor)); c.refreshMode(); return true; },
     listVendorModels: (vendor: unknown) => c.listModels(vendorArg(vendor)),
 
     pickFolder: () => c.pickFolder(),

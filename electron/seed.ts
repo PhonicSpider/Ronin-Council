@@ -49,7 +49,8 @@ export const SEED_AGENTS: Agent[] = [
   }),
   base({
     id: 'art', name: 'Iris', role: 'Art', tier: 'standard', color: '#9a6fd6', partnerId: 'ux-a',
-    specialty: 'Modeling, images, visual assets, and UX visual overview.',
+    abilities: ['meshy'],
+    specialty: 'Modeling, images, visual assets, and UX visual overview. Objects, props, scenery and 2D art are made with Meshy; characters are made by the user\'s Blender character skill, so for a character she writes a brief instead. The user can override either choice by naming the generator.',
     personality: 'Visual thinker. Describes assets precisely (dimensions, style, palette) so others can build against them.',
   }),
   base({
@@ -100,6 +101,8 @@ export const DEFAULT_SETTINGS: Settings = {
   vendorKeys: {},
   vendorUrls: {},
   modelTools: {},
+  hasMeshyKey: false,
+  meshyDailyCredits: 100,
 };
 
 /** Which agents each default channel starts with (Widow is added to every channel automatically). */

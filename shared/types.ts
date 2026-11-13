@@ -20,6 +20,8 @@ export interface Agent {
   tier: Tier;
   /** An explicit vendor and model. Absent = use the tier's model (Anthropic). */
   model?: ModelRef;
+  /** Extra things this agent may do, beyond talking (for example 'meshy': create art with Meshy). */
+  abilities?: string[];
   color: string;
   image?: string; // data URL
   partnerId?: string; // audit partner
@@ -90,7 +92,7 @@ export interface Message {
 
 /** What an agent wants to do, shown to Widow and then to the user before anything runs. */
 export interface ActionRequest {
-  tool: 'write_file' | 'edit_file' | 'run_command' | 'save_note' | 'git_publish';
+  tool: 'write_file' | 'edit_file' | 'run_command' | 'save_note' | 'git_publish' | 'meshy_generate';
   summary: string; // one line, e.g. "Edit src/Player.cs"
   preview: string; // the diff, or the exact command line
 }
@@ -143,12 +145,18 @@ export interface Settings {
   vendorUrls: Partial<Record<VendorId, string>>;
   /** Per model id: may it use tools? Absent = the vendor's default. */
   modelTools: Record<string, boolean>;
+  /** A Meshy key is saved (a flag only). */
+  hasMeshyKey: boolean;
+  /** Most Meshy credits all agents may spend in a day (Meshy bills in credits, not dollars). */
+  meshyDailyCredits: number;
 }
 
 export interface Spend {
   date: string; // YYYY-MM-DD (local)
   usd: number;
   byCategory: Record<string, number>;
+  /** Meshy credits used today (estimates, replaced by Meshy's own figure when a task finishes). */
+  meshyCredits?: number;
   /** Input tokens today that were served from the prompt cache, were written to it, or were billed in full. Lets you see that caching works. */
   cacheRead?: number;
   cacheWrite?: number;

@@ -153,6 +153,33 @@ function VendorRow({ snap, v }: { snap: Snapshot; v: VendorInfo }) {
   );
 }
 
+/** Meshy is not a model vendor: it makes 3D models and images for agents that have the ability, so it has its own key row. */
+function MeshyRow({ snap }: { snap: Snapshot }) {
+  const [key, setKey] = useState('');
+  const saved = snap.settings.hasMeshyKey;
+  return (
+    <div className="vendor-row" data-testid="vendor-meshy">
+      <div className="vendor-head">
+        <strong>Meshy (3D models and images)</strong>
+        <span className={`vendor-state ${saved ? 'on' : ''}`}>{saved ? 'key saved' : 'no key'}</span>
+      </div>
+      <div className="muted small">For agents you give the Meshy ability in their profile. Needs a Meshy plan with API access. Every generation costs credits and needs your approval; set the daily cap in Budgets.</div>
+      <div className="field-row">
+        <label>API key
+          <input type="password" value={key} data-testid="api-key-meshy" autoComplete="off"
+            placeholder={saved ? '•••••••• (saved, enter a new one to replace)' : 'msy_…'} onChange={(e) => setKey(e.target.value)} />
+        </label>
+        <div className="form-actions end">
+          <button className="btn primary" disabled={!key.trim()} data-testid="api-key-meshy-save" onClick={async () => {
+            if (await act('setApiKey', key, 'meshy')) { setKey(''); toast('Meshy key saved.'); }
+          }}>Save key</button>
+          <button className="btn danger" disabled={!saved} onClick={() => void act('clearApiKey', 'meshy')}>Remove key</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ApiTab({ snap }: { snap: Snapshot }) {
   const s = snap.settings;
   const agentModels = snap.agents.filter((a) => a.model && a.model.vendor !== 'local').map((a) => a.model!.model);
@@ -166,6 +193,7 @@ function ApiTab({ snap }: { snap: Snapshot }) {
           : Object.keys(s.vendorKeys).length ? 'Mock mode: a key is saved but "use mock agents" is on.' : 'Mock mode: no key saved yet. Replies are simulated and free.'}
       </div>
       {VENDORS.map((v) => <VendorRow key={v.id} snap={snap} v={v} />)}
+      <MeshyRow snap={snap} />
       <div className="muted small">Keys are encrypted with your operating system's secure storage and stay in the main process; the interface never receives them. Each agent's prompts go only to the vendor you pick for that agent.</div>
       <label className="check big">
         <input type="checkbox" checked={s.useMock} onChange={(e) => void act('updateSettings', { useMock: e.target.checked })} />
@@ -212,6 +240,9 @@ function BudgetsTab({ snap }: { snap: Snapshot }) {
         ))}
       </div>
       {snap.mode === 'mock' && <div className="muted small">Mock mode costs nothing, so no spend is recorded.</div>}
+      <div className="stat-row">
+        <div className="stat"><span className="muted">Meshy credits used today</span><strong data-testid="meshy-credits-today">{snap.spend.meshyCredits ?? 0} of {s.meshyDailyCredits}</strong></div>
+      </div>
       {((snap.spend.cacheRead ?? 0) + (snap.spend.cacheWrite ?? 0) + (snap.spend.inputFresh ?? 0)) > 0 && (
         <div className="muted small" data-testid="cache-stats">
           Input today: {(snap.spend.cacheRead ?? 0).toLocaleString()} tokens read from the cache (cheap), {(snap.spend.cacheWrite ?? 0).toLocaleString()} written to it, {(snap.spend.inputFresh ?? 0).toLocaleString()} billed in full.
@@ -224,6 +255,8 @@ function BudgetsTab({ snap }: { snap: Snapshot }) {
           onCommit={(n) => void act('updateSettings', { dailyBudgetUsd: n })} /></label>
         <label className="inline">Per-category daily budget <NumberField value={s.categoryBudgetUsd} step={0.5} prefix="$"
           onCommit={(n) => void act('updateSettings', { categoryBudgetUsd: n })} /></label>
+        <label className="inline">Meshy credits per day (all agents) <NumberField value={s.meshyDailyCredits} step={10} testid="meshy-daily-cap"
+          onCommit={(n) => void act('updateSettings', { meshyDailyCredits: n })} /></label>
         <label className="check big">
           <input type="checkbox" checked={s.autoNotes} onChange={(e) => void act('updateSettings', { autoNotes: e.target.checked })} />
           Quill writes notes and highlights automatically (uses a small amount of the fast model)

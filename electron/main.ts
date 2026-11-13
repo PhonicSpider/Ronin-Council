@@ -6,6 +6,7 @@ import { autoBackupIfDue } from './backup';
 import { Orchestrator } from './orchestrator';
 import { ClaudeProvider, MockProvider, Provider } from './providers';
 import { KeyVault } from './keys';
+import { HttpMeshyClient, MeshyClient, MockMeshyClient } from './meshy';
 import { OpenAIProvider } from './openai';
 import { RouterProvider } from './router';
 import { vendorInfo, VendorId } from '../shared/vendors';
@@ -37,7 +38,8 @@ function start() {
   const refreshMode = () => {
     const urls = store.settings.vendorUrls;
     const configured = Object.keys(keys.flags()).length > 0 || !!urls.local || !!urls.custom;
-    store.setHasApiKey(keys.has('anthropic'));
+    store.setHasApiKey(keys.has("anthropic"));
+    store.setHasMeshyKey(keys.has("meshy"));
     store.setVendorKeys(keys.flags());
     store.setMode(configured && !store.settings.useMock ? 'claude' : 'mock');
   };
@@ -60,6 +62,19 @@ function start() {
   };
   const router = new RouterProvider(providerFor);
 
+  // Meshy: a free placeholder while the agents are in Mock mode (so nothing is ever billed by accident), the real service when live
+  // and a key is saved, otherwise not offered at all.
+  const mockMeshy = new MockMeshyClient();
+  let liveMeshy: { key: string; client: MeshyClient } | null = null;
+  const getMeshy = (): MeshyClient | null => {
+    refreshMode();
+    if (store.mode === 'mock') return mockMeshy;
+    const key = keys.get('meshy');
+    if (!key) return null;
+    if (liveMeshy?.key !== key) liveMeshy = { key, client: new HttpMeshyClient(key) };
+    return liveMeshy.client;
+  };
+
   const getProvider = (): Provider => {
     refreshMode();
     return store.mode === 'claude' ? router : mock;
@@ -68,6 +83,7 @@ function start() {
   const resolver = (cat: Parameters<typeof resolveVaultPath>[0]) => resolveVaultPath(cat, defaultVaultRoot);
   const orch = new Orchestrator(store, {
     getProvider,
+    meshy: getMeshy,
     vaultDigest: (categoryId) => {
       try { return digestFor(store.categories(), categoryId, resolver); } catch { return '(vault unavailable)'; }
     },

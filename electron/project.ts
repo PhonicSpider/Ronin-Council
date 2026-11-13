@@ -544,3 +544,54 @@ function prepare(root: string, name: string, input: unknown): Prepared {
       throw new Error(`Unknown tool "${name}"`);
   }
 }
+
+// ---------- binary files the app itself saves into or reads from the project (generated art) ----------
+const IMAGE_TYPES: Record<string, { mime: string; magic: (b: Buffer) => boolean }> = {
+  png: { mime: 'image/png', magic: (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  jpg: { mime: 'image/jpeg', magic: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  jpeg: { mime: 'image/jpeg', magic: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  webp: { mime: 'image/webp', magic: (b) => b.length > 12 && b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP' },
+};
+
+/** True when the bytes really are the image type the extension claims (png, jpg, jpeg, webp). */
+export function imageMatchesExt(ext: string, data: Buffer): boolean {
+  const t = IMAGE_TYPES[ext.toLowerCase()];
+  return !!t && t.magic(data);
+}
+
+/** Reads an image from the project (png, jpg or webp; the bytes must really be that type). Same confinement as every other file tool. */
+export function readProjectImage(root: string, input: string, maxBytes: number): { rel: string; mime: string; data: Buffer } {
+  const { full, rel } = resolveTarget(root, input);
+  guardRead(rel);
+  const stat = fs.statSync(full);
+  if (!stat.isFile()) throw new Error(`${rel} is not a file`);
+  if (stat.size > maxBytes) throw new Error(`${rel} is too large (${stat.size} bytes, limit ${maxBytes}).`);
+  const type = IMAGE_TYPES[path.extname(full).slice(1).toLowerCase()];
+  if (!type) throw new Error(`${rel} is not a PNG, JPG or WebP image`);
+  const data = fs.readFileSync(full);
+  if (!type.magic(data)) throw new Error(`${rel} does not contain a real ${type.mime} image`);
+  return { rel, mime: type.mime, data };
+}
+
+/**
+ * Saves bytes the app downloaded (never agent-supplied text) at `<folder>/<stem>-<suffix>.<ext>` inside the project, under the same rules as
+ * write_file: no links, no protected or secret-looking names, nothing outside the project. It never overwrites; a taken name gets a number.
+ * Returns the project-relative path.
+ */
+export function saveProjectFile(root: string, folder: string, stem: string, suffix: string, ext: string, data: Buffer): string {
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'asset';
+  const e = ext.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 5) || 'bin';
+  for (let n = 0; n < 50; n++) {
+    const name = `${safe(stem)}-${safe(suffix)}${n ? `-${n + 1}` : ''}.${e}`;
+    const wanted = `${folder}/${name}`;
+    const target = resolveTarget(root, wanted);
+    guardWrite(target.rel);
+    assertNoLink(root, target.full);
+    if (fs.existsSync(target.full)) continue;
+    fs.mkdirSync(path.dirname(target.full), { recursive: true });
+    if (path.dirname(canonical(target.full)) !== path.dirname(target.full)) throw new Error('The folder now resolves somewhere else. Refusing.');
+    fs.writeFileSync(target.full, data, { flag: 'wx' }); // 'wx': fail rather than overwrite if it appeared in the meantime
+    return target.rel;
+  }
+  throw new Error('Could not find a free file name');
+}

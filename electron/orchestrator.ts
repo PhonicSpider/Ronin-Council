@@ -2,7 +2,9 @@ import * as fs from 'fs';
 import {
   ActionRequest, Agent, Channel, Message, MessageKind, Notification, SYSTEM_ID, LIBRARIAN_ID, Tier, USER_ID, Verdict, WIDOW_ID,
 } from '../shared/types';
+import { MESHY_ABILITY } from '../shared/meshy';
 import { ModelRef, toolsAllowed } from '../shared/vendors';
+import { MeshyClient, MESHY_TOOLS, MESHY_TOOL_NAMES, prepareMeshyTool } from './meshy';
 import { diffText, MAX_PREVIEW, Prepared, prepareTool, TOOL_DEFS, TOOL_NAMES, ToolOutput } from './project';
 import { validateNoteRel } from './vault';
 import { IncomingFile } from './attachments';
@@ -33,6 +35,8 @@ interface Decision { approved: boolean; by: 'Widow' | 'you' | 'Stop'; note?: str
 
 export interface OrchestratorDeps {
   getProvider(): Provider;
+  /** The Meshy client for agents that have the ability: a real one with a saved key, a free placeholder in Mock mode, or null (not set up). */
+  meshy?(): MeshyClient | null;
   /** Short text describing this category's vault and the other vaults (kept small). */
   vaultDigest(categoryId: string | null): string;
   /** Read access to the project vaults (every agent may read any vault). Absent in tests that don't need it. */
@@ -678,10 +682,12 @@ export class Orchestrator {
     images: ImageInput[] = [],
   ): Promise<string> {
     const messages: Turn[] = [{ role: 'user', content: promptContent(prompt, images) }];
-    const system = this.systemPrompt(agent, ch, root ?? undefined, vaultOn);
+    const system = this.systemPrompt(agent, ch, root ?? undefined, vaultOn, !!this.meshyFor(agent, root));
     const cat = this.store.category(ch.categoryId);
+    const meshy = this.meshyFor(agent, root);
     const tools = [
       ...(root ? TOOL_DEFS : []),
+      ...(meshy ? MESHY_TOOLS : []),
       ...(root && cat?.repoUrl ? [GIT_TOOL] : []),
       ...(vaultOn ? VAULT_TOOLS : []),
       ...(this.deps.vaults?.write && cat ? [SAVE_NOTE_TOOL] : []),
@@ -802,7 +808,17 @@ export class Orchestrator {
     let prep: Prepared;
     if (name === SAVE_NOTE_TOOL.name && this.deps.vaults?.write && cat) prep = this.prepareSaveNote(cat.id, cat.name, use.input);
     else if (name === GIT_TOOL.name && root && cat?.repoUrl) prep = prepareGitPublish(root, cat.repoUrl, use.input);
-    else if (!root || !TOOL_NAMES.has(name)) return { text: `Unknown tool "${name}".`, isError: true };
+    else if (MESHY_TOOL_NAMES.has(name)) {
+      const client = this.meshyFor(agent, root);
+      if (!root || !client) return { text: 'Meshy is not available for you here. It needs the Meshy ability, a project folder and a Meshy key.', isError: true };
+      prep = prepareMeshyTool(root, name, use.input, {
+        client,
+        creditsToday: () => this.store.meshyCreditsToday(),
+        dailyCap: () => this.store.settings.meshyDailyCredits,
+        addCredits: (n) => this.store.addMeshyCredits(n),
+        stillAvailable: () => { const now = this.meshyFor(agent, root); return !!now && now.mock === client.mock; },
+      });
+    } else if (!root || !TOOL_NAMES.has(name)) return { text: `Unknown tool "${name}".`, isError: true };
     else prep = prepareTool(root, name, use.input);
     if ('error' in prep) {
       this.toolRow(ch, agent, `${agent.name}: ${name} failed`, prep.error);
@@ -905,6 +921,11 @@ export class Orchestrator {
   private target(a: Agent): Tier | ModelRef { return a.model ?? a.tier; }
   private resolve(t: Tier | ModelRef): ModelRef {
     return typeof t === 'string' ? { vendor: 'anthropic', model: this.store.modelFor(t) } : t;
+  }
+  /** The Meshy client this agent may use, or null: it needs the ability, a project folder to save into, and a set-up client. */
+  private meshyFor(agent: Agent, root: string | null): MeshyClient | null {
+    if (!root || !agent.abilities?.includes(MESHY_ABILITY)) return null;
+    return this.deps.meshy?.() ?? null;
   }
   /** Whether this agent's model may use the project and vault tools (some models, especially small local ones, cannot do so reliably). */
   private canUseTools(a: Agent): boolean {
@@ -1013,7 +1034,7 @@ export class Orchestrator {
     }).join('\n');
   }
 
-  private systemPrompt(agent: Agent, ch: Channel, projectRoot?: string, vaultTools = false): string {
+  private systemPrompt(agent: Agent, ch: Channel, projectRoot?: string, vaultTools = false, meshyTools = false): string {
     const cat = this.store.category(ch.categoryId);
     const vaultLine = vaultTools
       ? [`- You can read the project vaults (Obsidian notes) with list_vault and read_vault, for any project. Use them to check prior decisions and methods before answering. ` +
@@ -1031,6 +1052,16 @@ export class Orchestrator {
       ]
       : [`- You cannot run code, edit files, or browse in this workspace — advise and draft only.`];
     abilities.push(...vaultLine);
+    if (meshyTools) {
+      abilities.push(
+        `- You can make art with Meshy, an outside service that costs credits: meshy_generate (3D models from text or an image, and pictures from text), meshy_fetch and meshy_balance. ` +
+          `Each generation needs Widow's audit and the user's approval, shown with the estimated credits, and results are saved under assets/meshy/ in the project.`,
+        `- Which generator: objects, props, scenery and 2D art use Meshy. A CHARACTER is made by the user's Blender character skill, not by Meshy: for a character, write a brief with write_file to assets/requests/<name>.md ` +
+          `(what it is, style, proportions, pose, outfit, colours, references, file formats) and tell the user to run their Blender skill. ` +
+          `If the user names a generator ("use Meshy for this", "do it in Blender"), do what they say. Say which generator you are using before you call a tool. ` +
+          `Start with quality "draft" to try an idea; use "standard" only when asked or once the idea is settled. Never generate just to experiment.`,
+      );
+    }
     if (this.deps.vaults?.write && cat && (projectRoot || vaultTools)) {
       abilities.push(`- When you finish real work worth keeping (an audit, a decision, a plan), save it once with save_note into the project vault (for example Reports/topic.md). ` +
         `It needs Widow's audit and the user's approval, so do not use it for chatter.`);

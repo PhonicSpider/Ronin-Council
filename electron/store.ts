@@ -5,6 +5,7 @@ import {
   Agent, AgentStatus, Attachment, Category, Channel, ChannelKind, Message, Note, Notification, Settings, Snapshot,
   Spend, Tier, WIDOW_DM_ID, WIDOW_ID, Price,
 } from '../shared/types';
+import { isAbility } from '../shared/meshy';
 import { cleanModelRef, isModelName, isVendorId, ModelRef, validBaseUrl, validLocalUrl, vendorInfo, VendorId } from '../shared/vendors';
 import { DEFAULT_CHANNELS, DEFAULT_SETTINGS, LEGACY_AGENT_IDS, SEED_AGENTS, seedCategories, widowDm } from './seed';
 
@@ -25,8 +26,12 @@ export interface NewAgent {
   name: string; role: string; specialty: string; personality: string; tier: Tier;
   /** null clears an explicit model (back to the tier). */
   model?: ModelRef | null;
+  abilities?: string[];
   color?: string; image?: string; partnerId?: string;
 }
+
+/** Marker in `provisioned`: Iris was given the Meshy ability once. A later removal of it by the user sticks. */
+const ABILITY_MESHY_ART = 'ability:meshy-art';
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,24}$/;
 const PALETTE = ['#4f8fd6', '#d6784f', '#6fae8a', '#c9a64e', '#d66f9a', '#9a6fd6', '#4fb3b3', '#d64f4f'];
@@ -46,6 +51,11 @@ function reorder<T extends { id: string; order: number }>(items: T[], id: string
   sorted.splice(to, 0, moved);
   sorted.forEach((item, i) => { item.order = i; });
 }
+
+const cleanAbilities = (list: unknown): string[] => {
+  if (!Array.isArray(list) || !list.every(isAbility)) throw new Error('Unknown ability');
+  return [...new Set(list as string[])];
+};
 
 export class Store {
   private data: Data;
@@ -74,7 +84,7 @@ export class Store {
       });
     }
     return {
-      provisioned: SEED_AGENTS.map((a) => a.id),
+      provisioned: [...SEED_AGENTS.map((a) => a.id), ABILITY_MESHY_ART],
       agents: SEED_AGENTS.map((a) => ({ ...a })),
       categories, channels, messages: [], notifications: [], notes: [],
       settings: structuredClone(DEFAULT_SETTINGS),
@@ -101,6 +111,11 @@ export class Store {
       provisioned: Array.isArray(raw.provisioned) ? raw.provisioned : [...LEGACY_AGENT_IDS],
     } as Data;
     this.provisionNewAgents(data);
+    if (!data.provisioned.includes(ABILITY_MESHY_ART)) {
+      data.provisioned.push(ABILITY_MESHY_ART);
+      const iris = data.agents.find((a) => a.id === 'art');
+      if (iris && !iris.abilities) iris.abilities = ['meshy'];
+    }
     return data;
   }
 
@@ -358,6 +373,7 @@ export class Store {
       id: newId('agent'), name, role: input.role.trim() || 'Agent', specialty: input.specialty.trim(),
       personality: input.personality.trim(), tier: input.tier,
       ...(input.model ? { model: cleanModelRef(input.model) } : {}),
+      ...(input.abilities?.length ? { abilities: cleanAbilities(input.abilities) } : {}),
       color: input.color ?? PALETTE[this.data.agents.length % PALETTE.length],
       image: input.image, partnerId: input.partnerId, status: 'idle',
     };
@@ -379,6 +395,7 @@ export class Store {
     if (patch.specialty !== undefined) a.specialty = patch.specialty;
     if (patch.personality !== undefined) a.personality = patch.personality;
     if (patch.tier !== undefined) a.tier = patch.tier;
+    if (patch.abilities !== undefined) a.abilities = patch.abilities.length ? cleanAbilities(patch.abilities) : undefined;
     if (patch.model !== undefined) a.model = patch.model ? cleanModelRef(patch.model) : undefined;
     if (patch.color !== undefined) a.color = patch.color;
     if (patch.image !== undefined) a.image = patch.image || undefined;
@@ -476,7 +493,7 @@ export class Store {
   }
 
   // ---------- settings / spend ----------
-  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys'>>) {
+  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys' | 'hasMeshyKey'>>) {
     const s = this.data.settings;
     if (patch.vendorUrls) {
       // Only the vendors whose address is the user's to set; a hosted vendor's address is fixed so its key cannot be redirected.
@@ -518,7 +535,13 @@ export class Store {
     if (patch.categoryBudgetUsd !== undefined) s.categoryBudgetUsd = num(patch.categoryBudgetUsd, 0, 10000, s.categoryBudgetUsd);
     if (patch.turnCap !== undefined) s.turnCap = Math.round(num(patch.turnCap, 1, 30, s.turnCap));
     if (patch.useMock !== undefined) s.useMock = !!patch.useMock;
+    if (patch.meshyDailyCredits !== undefined) s.meshyDailyCredits = Math.round(num(patch.meshyDailyCredits, 0, 100000, s.meshyDailyCredits));
     if (patch.autoNotes !== undefined) s.autoNotes = !!patch.autoNotes;
+    this.changed();
+  }
+  setHasMeshyKey(v: boolean) {
+    if (this.data.settings.hasMeshyKey === v) return;
+    this.data.settings.hasMeshyKey = v;
     this.changed();
   }
   setHasApiKey(v: boolean) {
@@ -556,6 +579,14 @@ export class Store {
     this.changed(false);
   }
   spendToday() { this.rollSpend(); return this.data.spend.usd; }
+  meshyCreditsToday() { this.rollSpend(); return this.data.spend.meshyCredits ?? 0; }
+  /** Adds (or, with a negative number, takes back) Meshy credits. The total never goes below zero. */
+  addMeshyCredits(delta: number) {
+    if (!Number.isFinite(delta)) return;
+    this.rollSpend();
+    this.data.spend.meshyCredits = Math.max(0, (this.data.spend.meshyCredits ?? 0) + delta);
+    this.changed(false);
+  }
   spendCategory(categoryId: string | null) {
     this.rollSpend();
     return categoryId ? this.data.spend.byCategory[categoryId] ?? 0 : 0;

@@ -67,6 +67,15 @@ export function AgentPopup({ snap, agentId, onClose }: { snap: Snapshot; agentId
             <textarea rows={5} value={personality} onChange={(e) => setPersonality(e.target.value)} data-testid="agent-personality" />
           </label>
 
+          <label className="check" data-testid="ability-meshy-row">
+            <input type="checkbox" data-testid="ability-meshy" checked={!!agent.abilities?.includes('meshy')}
+              onChange={(e) => void act('updateAgent', agent.id, { abilities: e.target.checked ? ['meshy'] : [] })} />
+            Can create art with Meshy (3D models and images; every use costs credits and needs your approval)
+          </label>
+          {agent.abilities?.includes('meshy') && !snap.settings.hasMeshyKey && snap.mode === 'claude' && (
+            <div className="muted small"><strong className="warn-text">No Meshy key saved yet (Settings, API &amp; Models).</strong> Until then this agent cannot use it.</div>
+          )}
+
           <div className="field-row">
             <div className="stat"><span className="muted">Audit partner</span><strong>{partner ? partner.name : 'None (Widow reviews)'}</strong></div>
             <div className="stat"><span className="muted">Messages posted</span><strong>{posted}</strong></div>

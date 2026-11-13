@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { isVendorId, VendorId } from '../shared/vendors';
+import type { VendorId } from '../shared/vendors';
+import { isKeyId, KEY_IDS, KeyId } from '../shared/vendors';
 
 /** The slice of Electron's safeStorage this needs (so tests can supply a fake). */
 export interface Crypto {
@@ -16,10 +17,10 @@ export interface Crypto {
  * install keeps working. Keys are held in the main process only; the interface is told which vendors have one, never the key.
  */
 export class KeyVault {
-  private keys = new Map<VendorId, string>();
+  private keys = new Map<KeyId, string>();
 
   constructor(private dir: string, private crypto: Crypto) {
-    for (const v of ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'local', 'custom'] as VendorId[]) {
+    for (const v of KEY_IDS) {
       try {
         const f = this.file(v);
         if (fs.existsSync(f) && crypto.isEncryptionAvailable()) this.keys.set(v, crypto.decryptString(fs.readFileSync(f)));
@@ -27,20 +28,21 @@ export class KeyVault {
     }
   }
 
-  private file(v: VendorId) {
-    if (!isVendorId(v)) throw new Error('Unknown vendor');
+  private file(v: KeyId) {
+    if (!isKeyId(v)) throw new Error('Unknown vendor');
     return v === 'anthropic' ? path.join(this.dir, 'api-key.bin') : path.join(this.dir, 'keys', `${v}.bin`);
   }
 
-  get(v: VendorId): string | undefined { return this.keys.get(v); }
-  has(v: VendorId): boolean { return this.keys.has(v); }
+  get(v: KeyId): string | undefined { return this.keys.get(v); }
+  has(v: KeyId): boolean { return this.keys.has(v); }
+  /** Which model vendors have a key (Meshy is reported separately, so a Meshy key alone never switches the agents to live mode). */
   flags(): Partial<Record<VendorId, boolean>> {
     const out: Partial<Record<VendorId, boolean>> = {};
-    for (const v of this.keys.keys()) out[v] = true;
+    for (const v of this.keys.keys()) if (v !== 'meshy') out[v as VendorId] = true;
     return out;
   }
 
-  set(v: VendorId, key: string) {
+  set(v: KeyId, key: string) {
     if (!key) throw new Error('Enter an API key');
     const weak = this.crypto.getSelectedStorageBackend?.() === 'basic_text';
     if (!this.crypto.isEncryptionAvailable() || weak) throw new Error('Secure storage is not available on this system, so the key was not saved');
@@ -50,7 +52,7 @@ export class KeyVault {
     this.keys.set(v, key);
   }
 
-  clear(v: VendorId) {
+  clear(v: KeyId) {
     try { fs.rmSync(this.file(v), { force: true }); } catch { /* ignore */ }
     this.keys.delete(v);
   }

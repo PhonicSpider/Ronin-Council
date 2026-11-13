@@ -3,6 +3,11 @@
 export type VendorId = 'anthropic' | 'openai' | 'google' | 'xai' | 'deepseek' | 'local' | 'custom';
 export interface ModelRef { vendor: VendorId; model: string }
 
+/** Anything that has a saved key: the model vendors, plus Meshy (3D and image generation). */
+export type KeyId = VendorId | 'meshy';
+export const KEY_IDS: KeyId[] = ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'local', 'custom', 'meshy'];
+export const isKeyId = (v: unknown): v is KeyId => typeof v === 'string' && (KEY_IDS as string[]).includes(v);
+
 export interface VendorInfo {
   id: VendorId;
   label: string;

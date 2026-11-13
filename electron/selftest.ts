@@ -471,6 +471,50 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       check('clearing the address returns to mock mode', store.settings.vendorUrls.local === undefined && store.mode === 'mock');
     });
 
+    await step('Meshy: the ability is per agent, the key has its own row, and the credit cap is a setting', async () => {
+      // Settings, Agents: open Iris's profile.
+      await js(`__t.tid('open-settings').click()`);
+      await waitFor(`__t.tid('settings')`, 3000);
+      await js(`__t.tid('settings-tab-agents').click()`);
+      await waitFor(`__t.all('agent-row').length > 3`, 3000);
+      await js(`__t.all('agent-row').find(r => r.textContent.includes('Iris')).querySelector('button').click()`);
+      await waitFor(`__t.tid('ability-meshy')`, 3000);
+      const onByDefault = await js<boolean>(`__t.tid('ability-meshy').checked`);
+      await shot('34-meshy-ability');
+      await js(`__t.tid('ability-meshy').click()`);
+      await wait(300);
+      const off = store.agent('art')?.abilities === undefined;
+      await js(`__t.tid('ability-meshy').click()`);
+      await wait(300);
+      const on = JSON.stringify(store.agent('art')?.abilities) === '["meshy"]';
+      check('Iris has the Meshy ability by default; the checkbox turns it off and on', onByDefault && off && on, { onByDefault, off, on });
+      await js(`__t.tid('agent-popup').querySelector('.close').click()`);
+      await waitFor(`!__t.tid('agent-popup')`, 2000);
+      // Another agent does not have it.
+      await js(`__t.all('agent-row').find(r => r.textContent.includes('Mira')).querySelector('button').click()`);
+      await waitFor(`__t.tid('ability-meshy')`, 3000);
+      const miraOff = await js<boolean>(`!__t.tid('ability-meshy').checked`);
+      check('Mira (UX) does not have Meshy unless you turn it on', miraOff);
+      await js(`__t.tid('agent-popup').querySelector('.close').click()`);
+      await waitFor(`!__t.tid('agent-popup')`, 2000);
+      // API & Models: its own key row (the key itself is never saved in a test).
+      await js(`__t.tid('settings-tab-api').click()`);
+      const row = await waitFor(`__t.tid('vendor-meshy') && __t.tid('api-key-meshy')`, 3000);
+      await shot('35-meshy-key');
+      check('API & Models has a Meshy row with a key box', row);
+      // Budgets: credits used and the cap.
+      await js(`__t.tid('settings-tab-budgets').click()`);
+      await waitFor(`__t.tid('meshy-daily-cap')`, 3000);
+      const shown = await js<string>(`__t.tid('meshy-credits-today').textContent`);
+      await js(`__t.setVal(__t.tid('meshy-daily-cap'), '150'); __t.tid('meshy-daily-cap').dispatchEvent(new Event('blur', { bubbles: true }))`);
+      await js(`__t.tid('meshy-daily-cap').focus(); __t.tid('meshy-daily-cap').blur()`);
+      await wait(400);
+      check('Budgets shows Meshy credits used against the cap, and the cap can be changed', shown === '0 of 100' && store.settings.meshyDailyCredits === 150, { shown, cap: store.settings.meshyDailyCredits });
+      store.updateSettings({ meshyDailyCredits: 100 });
+      await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+      await waitFor(`!__t.tid('settings')`, 2000);
+    });
+
     await step('agent profile popup', async () => {
       await js(`document.querySelector('.roster .rchip').click()`);
       const open = await waitFor(`__t.tid('agent-popup')`);
