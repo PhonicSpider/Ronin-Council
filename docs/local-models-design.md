@@ -136,6 +136,10 @@ Known limits (not fixed, on purpose):
   mirror, not against a compromised release.
 - `ollama.exe` and its uninstaller are trusted by where they are (registry, default folder, a copy you chose), not by signature. A
   program that can already write to your user folders could swap them, which it could do anyway.
+- A copy you browse to is remembered in the settings file and trusted from then on, without needing the scan to find it again. The
+  file picker and a native confirmation guard the choice itself, but anything that can already write your settings file could change
+  that saved path. A path saved by other means still needs something else (uninstall list, default folder, a running copy, PATH or
+  the scan) to point at it before it counts.
 - Ollama on a non-default port (`OLLAMA_HOST`) is not supported; the panel always uses 127.0.0.1:11434.
 - If you installed Ollama yourself and it was installed for all users with a different uninstaller, "Uninstall" is not offered and
   the panel points you to Windows Settings, Apps.
