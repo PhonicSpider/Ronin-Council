@@ -12,6 +12,7 @@ interface Props {
   onCategorySettings: (categoryId: string) => void;
   onJump: (channelId: string, messageId: string) => void;
   onNotifs: () => void;
+  onLocalModels: () => void;
   onWidow: () => void;
   widowActive: boolean;
 }
@@ -25,6 +26,7 @@ function Icon({ d }: { d: string }) {
   );
 }
 const GEAR = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z';
+const CHIP = 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3';
 const BELL = 'M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9zM13.7 21a2 2 0 0 1-3.4 0';
 /** Each category gets its own accent, picked by position, so the tree reads at a glance. */
 const CAT_COLORS = ['#e5484d', '#4cc9e6', '#e8b04a', '#9a7cf0', '#5fd08f', '#f07ab0'];
@@ -48,7 +50,7 @@ function InlineInput({ initial = '', placeholder, onSubmit, onCancel }: {
   );
 }
 
-export function Sidebar({ snap, selectedId, unread, onSelect, onSettings, onCategorySettings, onJump, onNotifs, onWidow, widowActive }: Props) {
+export function Sidebar({ snap, selectedId, unread, onSelect, onSettings, onCategorySettings, onJump, onNotifs, onLocalModels, onWidow, widowActive }: Props) {
   const cats = [...snap.categories].sort((a, b) => a.order - b.order);
   const drag = useRef<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -112,6 +114,9 @@ export function Sidebar({ snap, selectedId, unread, onSelect, onSettings, onCate
         <button className="icon-btn" title="Notifications" data-testid="open-notifications" onClick={onNotifs}>
           <Icon d={BELL} />
           {unread > 0 && <span className="badge" data-testid="notif-badge">{unread > 9 ? '9+' : unread}</span>}
+        </button>
+        <button className="icon-btn" title="Local models" data-testid="open-local-models" onClick={onLocalModels}>
+          <Icon d={CHIP} />
         </button>
         <SearchBox snap={snap} onJump={onJump} />
         <button className={`icon-btn${widowActive ? ' active' : ''}`} title="Chat with Widow"

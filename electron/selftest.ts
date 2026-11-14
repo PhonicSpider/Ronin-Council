@@ -5,6 +5,7 @@ import * as http from 'http';
 import * as os from 'os';
 import type { AddressInfo } from 'net';
 import * as path from 'path';
+import { CATALOG } from '../shared/ollama';
 import type { Store } from './store';
 
 interface Result { step: string; ok: boolean; detail?: unknown }
@@ -506,8 +507,7 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       await js(`__t.tid('settings-tab-budgets').click()`);
       await waitFor(`__t.tid('meshy-daily-cap')`, 3000);
       const shown = await js<string>(`__t.tid('meshy-credits-today').textContent`);
-      await js(`__t.setVal(__t.tid('meshy-daily-cap'), '150'); __t.tid('meshy-daily-cap').dispatchEvent(new Event('blur', { bubbles: true }))`);
-      await js(`__t.tid('meshy-daily-cap').focus(); __t.tid('meshy-daily-cap').blur()`);
+      await js(`__t.setVal(__t.tid('meshy-daily-cap'), '150'); __t.key(__t.tid('meshy-daily-cap'), 'Enter')`); // Enter commits whether or not the window has focus
       await wait(400);
       check('Budgets shows Meshy credits used against the cap, and the cap can be changed', shown === '0 of 100' && store.settings.meshyDailyCredits === 150, { shown, cap: store.settings.meshyDailyCredits });
       store.updateSettings({ meshyDailyCredits: 100 });
@@ -766,6 +766,34 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       check('repo link is normalised on save and a non-GitHub address is refused',
         saved === 'https://github.com/ronin/game' && store.category(id)?.repoUrl === saved, saved);
       await shot('25-settings-repo');
+    });
+
+    await step('local models: the popup reads this machine (read-only; nothing is installed or run)', async () => {
+      await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+      await wait(200);
+      await js(`__t.tid('open-local-models').click()`);
+      const open = await waitFor(`__t.tid('local-models')`, 3000);
+      const scanned = await waitFor(`!__t.tid('lm-scanning') && (__t.tid('lm-not-found') || __t.tid('lm-install') || __t.all('lm-candidate').length > 0)`, 45000);
+      const hardware = await waitFor(`__t.tid('lm-hardware') && /RAM/.test(__t.tid('lm-hardware').textContent)`, 15000);
+      const rows = await js<number>(`__t.all('lm-catalog-row').length`);
+      const badges = await js<number>(`document.querySelectorAll('.fit').length`);
+      const hasCheck = await js<boolean>(`!!__t.tid('lm-check') && !!__t.tid('lm-rescan')`);
+      const running = await js<boolean>(`!!__t.tid('lm-server-state') && /Running/.test(__t.tid('lm-server-state').textContent)`);
+      const downloadsGated = running || (await js<boolean>(`__t.all('lm-download').every((b) => b.disabled)`));
+      await shot('29-local-models');
+      // the "start with the app" switch reaches the real settings
+      const before = store.settings.ollamaAutoStart;
+      await js(`__t.tid('lm-autostart').click()`);
+      await wait(400);
+      const flipped = store.settings.ollamaAutoStart === !before;
+      await js(`__t.tid('lm-autostart').click()`);
+      await wait(400);
+      const restored = store.settings.ollamaAutoStart === before;
+      await js(`__t.tid('lm-close').click()`);
+      const closed = await waitFor(`!__t.tid('local-models')`, 3000);
+      check('Local models opens, finishes the drive scan, shows hardware, a badge on every listed model, gated downloads, a working autostart switch, and closes',
+        open && scanned && hardware && rows === CATALOG.length && badges >= rows && hasCheck && downloadsGated && flipped && restored && closed,
+        { open, scanned, hardware, rows, badges, hasCheck, downloadsGated, flipped, restored, closed });
     });
   } catch (e) {
     check('self-test aborted', false, (e as Error).message);

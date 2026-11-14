@@ -3,6 +3,7 @@ import { WIDOW_DM_ID } from '../shared/types';
 import { useSnapshot, useToast } from './api';
 import { AgentPopup } from './components/AgentPopup';
 import { ChatView } from './components/ChatView';
+import { LocalModels } from './components/LocalModels';
 import { Notifications } from './components/Notifications';
 import { RightPanel, ViewerTab } from './components/RightPanel';
 import { CategoryPopup } from './components/CategoryPopup';
@@ -24,6 +25,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [catSettings, setCatSettings] = useState<string | null>(null);
   const [notifsOpen, setNotifsOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(() => store.get('rc.panel') !== '0');
   const [ratio, setRatioState] = useState(() => {
@@ -71,6 +73,7 @@ export default function App() {
         onCategorySettings={setCatSettings}
         onJump={(channelId, messageId) => { select(channelId); setJumpTo((j) => ({ id: messageId, n: (j?.n ?? 0) + 1 })); }}
         onNotifs={() => setNotifsOpen((v) => !v)}
+        onLocalModels={() => setLocalOpen(true)}
         onWidow={() => select(WIDOW_DM_ID)}
         widowActive={channel.id === WIDOW_DM_ID}
       />
@@ -95,6 +98,7 @@ export default function App() {
         <Settings snap={snap} initialTab={settingsTab} channelId={channel.id === WIDOW_DM_ID ? (snap.channels.find((c) => c.kind === 'general')?.id ?? channel.id) : channel.id}
           onClose={() => setSettingsOpen(false)} onOpenAgent={(id) => setAgentId(id)} />
       )}
+      {localOpen && <LocalModels onClose={() => setLocalOpen(false)} />}
       {agentId && <AgentPopup snap={snap} agentId={agentId} onClose={() => setAgentId(null)} />}
       {toastMsg && <div className="toast" role="status" onClick={dismissToast} data-testid="toast">{toastMsg}</div>}
     </div>

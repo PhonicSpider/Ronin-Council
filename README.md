@@ -13,6 +13,7 @@ A desktop chat app where you talk to a team of Claude agents. It looks like Disc
 - **Second opinions.** Deliverables are reviewed by a partner agent, and Widow decides what reaches you.
 - **Any vendor, per agent.** Each agent picks its own vendor and model, so an OpenAI model can audit a Claude one, or the other way round. Anthropic, OpenAI, Google Gemini, xAI Grok and DeepSeek are built in. Local models (Ollama, LM Studio) and any OpenAI-compatible service such as OpenRouter work too. See [docs/multi-vendor.md](docs/multi-vendor.md).
 - **Art with Meshy.** Agents you give the Meshy ability (Iris by default) can make 3D models and images through Meshy. Each generation shows its exact prompt and estimated credits and waits for your approval, results are saved in the project under `assets/meshy/`, and a daily credit cap keeps spending in check. Characters are meant for a Blender character skill, so Iris writes a brief for those instead. Needs your own Meshy key. See [docs/meshy-design.md](docs/meshy-design.md).
+- **Local models.** The chip button at the top left opens a panel for running models on your own computer through Ollama. It finds Ollama on any drive, starts and stops it, and can check for updates, install or uninstall it. It lists what you have downloaded and a catalog to download from, with a badge showing whether each model fits your RAM and graphics card. Everything starts from a click, and installing, updating and uninstalling each ask first. See [docs/local-models-design.md](docs/local-models-design.md).
 - **Notes and vaults.** The librarian writes notes for each channel into an Obsidian-style folder that every agent can read.
 - **Search.** The magnifier at the top left (or Ctrl+F) searches every chat and jumps to the message.
 - **Cost controls.** Daily and per-category budgets, a turn cap, loop detection, and a Stop all button.
@@ -37,7 +38,7 @@ npm start
 
 With no API key the app runs in Mock mode: agents give canned replies and nothing is billed, but every feature still works. To use the real agents, open Settings, then API & Models, and paste a key for each vendor you want to use (Anthropic is the default for every agent). Keys are encrypted with Windows secure storage and kept outside this folder. They are never sent to the interface or written to the repository.
 
-To give an agent another model, click its portrait, then pick a vendor and a model. Local models need no key: choose "Open source (local)" under API & Models, set the server address, then type the model name.
+To give an agent another model, click its portrait, then pick a vendor and a model. Local models need no key: open the Local models panel (the chip button), start Ollama, download a model, then choose "Open source (local)" for an agent. You can also point it at LM Studio or another server under API & Models.
 
 If `npm install` leaves Electron without its binary, see the install note in [docs/details.md](docs/details.md).
 

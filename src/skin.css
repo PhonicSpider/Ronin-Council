@@ -170,10 +170,10 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--acce
 
 /* ---------- overlays ---------- */
 .overlay { background: rgba(4,5,10,.62); backdrop-filter: blur(6px); }
-.agent-card, .settings { background: rgba(17,19,30,.94); backdrop-filter: blur(20px); border-color: var(--glass-line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+.agent-card, .settings, .lm { background: rgba(17,19,30,.94); backdrop-filter: blur(20px); border-color: var(--glass-line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
 .agent-head .avatar { border-color: #11131e; }
 .agent-name, .nav-title { font-family: var(--display); letter-spacing: .05em; }
-.settings-nav, .agent-foot { background: rgba(0,0,0,.25); }
+.settings-nav, .agent-foot, .lm-head { background: rgba(0,0,0,.25); }
 .nav-item.active { background: linear-gradient(90deg, rgba(229,72,77,.35), rgba(229,72,77,.08)); }
 .agent-row, .stat, .notif { background: rgba(255,255,255,.05); border-radius: 10px; }
 .chev { display: grid; place-items: center; width: 20px; height: 20px; }

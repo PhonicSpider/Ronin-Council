@@ -493,7 +493,7 @@ export class Store {
   }
 
   // ---------- settings / spend ----------
-  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys' | 'hasMeshyKey'>>) {
+  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys' | 'hasMeshyKey' | 'ollamaPath'>>) {
     const s = this.data.settings;
     if (patch.vendorUrls) {
       // Only the vendors whose address is the user's to set; a hosted vendor's address is fixed so its key cannot be redirected.
@@ -537,6 +537,14 @@ export class Store {
     if (patch.useMock !== undefined) s.useMock = !!patch.useMock;
     if (patch.meshyDailyCredits !== undefined) s.meshyDailyCredits = Math.round(num(patch.meshyDailyCredits, 0, 100000, s.meshyDailyCredits));
     if (patch.autoNotes !== undefined) s.autoNotes = !!patch.autoNotes;
+    if (patch.ollamaAutoStart !== undefined) s.ollamaAutoStart = patch.ollamaAutoStart === true;
+    this.changed();
+  }
+  /** The Ollama folder the user confirmed. Set by the app after checking it; never taken from the renderer's settings patch. */
+  setOllamaPath(dir: string) {
+    if (typeof dir !== 'string' || (dir !== '' && !/^[A-Za-z]:[\\/]/.test(dir))) throw new Error('Invalid folder');
+    if (this.data.settings.ollamaPath === dir) return;
+    this.data.settings.ollamaPath = dir;
     this.changed();
   }
   setHasMeshyKey(v: boolean) {

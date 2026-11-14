@@ -232,7 +232,7 @@ describe('api: backups and Stop all', () => {
     const orch = new Orchestrator(store, { getProvider: () => new MockProvider(), vaultDigest: () => '(vault)' });
     let refreshed = 0;
     const api = createApi({
-      store, orch, defaultVaultRoot: dir, pickFolder: async () => null, setApiKey: () => undefined, clearApiKey: () => undefined, listModels: async () => [],
+      store, orch, ollama: undefined as never, defaultVaultRoot: dir, pickFolder: async () => null, setApiKey: () => undefined, clearApiKey: () => undefined, listModels: async () => [],
       refreshMode: () => { refreshed++; }, devTools: false, protectedRoots: [], backupRoot: path.join(dir, 'backups'),
     });
     return { api, store, dir, refreshed: () => refreshed };

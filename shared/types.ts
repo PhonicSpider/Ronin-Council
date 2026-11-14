@@ -149,6 +149,10 @@ export interface Settings {
   hasMeshyKey: boolean;
   /** Most Meshy credits all agents may spend in a day (Meshy bills in credits, not dollars). */
   meshyDailyCredits: number;
+  /** The Ollama folder the user confirmed (empty = none). */
+  ollamaPath: string;
+  /** Start Ollama when the app opens, if an agent uses a local model. */
+  ollamaAutoStart: boolean;
 }
 
 export interface Spend {

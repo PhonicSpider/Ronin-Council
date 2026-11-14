@@ -103,6 +103,8 @@ export const DEFAULT_SETTINGS: Settings = {
   modelTools: {},
   hasMeshyKey: false,
   meshyDailyCredits: 100,
+  ollamaPath: '',
+  ollamaAutoStart: false,
 };
 
 /** Which agents each default channel starts with (Widow is added to every channel automatically). */

@@ -166,7 +166,7 @@ describe('api boundary', () => {
   const api = () => {
     const { store, orch } = env();
     const a = createApi({
-      store, orch, defaultVaultRoot: os.tmpdir(), pickFolder: async () => null,
+      store, orch, ollama: undefined as never, defaultVaultRoot: os.tmpdir(), pickFolder: async () => null,
       setApiKey: () => undefined, clearApiKey: () => undefined, listModels: async () => [], refreshMode: () => undefined, devTools: false, protectedRoots: [], backupRoot: path.join(os.tmpdir(), 'rc-unused-backups'),
     });
     return { store, a };

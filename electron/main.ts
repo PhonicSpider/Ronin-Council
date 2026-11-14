@@ -1,11 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } from 'electron';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { createApi } from './api';
 import { autoBackupIfDue } from './backup';
 import { Orchestrator } from './orchestrator';
 import { ClaudeProvider, MockProvider, Provider } from './providers';
 import { KeyVault } from './keys';
+import { OllamaManager } from './ollama';
+import { createOllamaSystem } from './ollamaSystem';
+import { OLLAMA_DEFAULT_ORIGIN } from '../shared/ollama';
+import { scrubbedEnv } from './project';
 import { HttpMeshyClient, MeshyClient, MockMeshyClient } from './meshy';
 import { OpenAIProvider } from './openai';
 import { RouterProvider } from './router';
@@ -114,8 +119,33 @@ function start() {
   const backupRoot = path.join(userData, 'backups');
   autoBackupIfDue(store, backupRoot); // at most one a day; keeps the newest few
 
+  // Local models: finds, starts, stops, updates and removes Ollama, and manages its models. Used only from the Local models popup.
+  const ollama = new OllamaManager({
+    sys: createOllamaSystem(),
+    downloadDir: path.join(userData, 'downloads'),
+    origin: () => OLLAMA_DEFAULT_ORIGIN.replace('localhost', '127.0.0.1'),
+    getSavedDir: () => store.settings.ollamaPath,
+    setSavedDir: (d) => store.setOllamaPath(d),
+    addressSaved: () => !!store.settings.vendorUrls.local,
+    localAgents: () => store.agents().filter((a) => a.model?.vendor === 'local').map((a) => ({ id: a.id, name: a.name })),
+    resetAgent: (id) => { store.updateAgent(id, { model: null }); },
+    protectedDirs: [userData, app.getPath('appData'), path.dirname(process.execPath)],
+    home: os.homedir(),
+    childEnv: () => scrubbedEnv(),
+    // Shown by the main process itself, so the page cannot change what the user is agreeing to.
+    confirmNative: async (o) => {
+      if (!win) return false;
+      const r = await dialog.showMessageBox(win, { type: 'warning', title: o.title, message: o.message, detail: o.detail, buttons: ['Cancel', o.ok], defaultId: 0, cancelId: 0, noLink: true });
+      return r.response === 1;
+    },
+    localAppData: process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'),
+  });
+  if (store.settings.ollamaAutoStart && store.agents().some((a) => a.model?.vendor === 'local')) {
+    void ollama.detect().then(() => ollama.start()).catch((e) => console.error('ollama auto-start:', (e as Error).message));
+  }
+
   const api = createApi({
-    store, orch, defaultVaultRoot, refreshMode, devTools: !app.isPackaged, backupRoot,
+    store, orch, ollama, defaultVaultRoot, refreshMode, devTools: !app.isPackaged, backupRoot,
     protectedRoots: [
       userData, app.getPath('appData'), path.dirname(process.execPath), process.env.windir, process.env.ProgramFiles,
       process.env['ProgramFiles(x86)'], process.env.ProgramData,
@@ -199,7 +229,16 @@ function start() {
   const outDir = app.isPackaged ? undefined : process.env.RC_SELFTEST;
   if (outDir) void runSelfTest(w, store, outDir, userData).finally(() => app.quit());
 
-  app.on('before-quit', () => store.flush());
+  // A server this app started is stopped when it quits; one that was already running is left alone.
+  let quitting = false;
+  app.on('before-quit', (e) => {
+    store.flush();
+    if (!quitting && ollama.ownsServer) {
+      e.preventDefault();
+      quitting = true;
+      void ollama.shutdown().finally(() => app.quit());
+    }
+  });
 }
 
 if (!app.requestSingleInstanceLock()) {

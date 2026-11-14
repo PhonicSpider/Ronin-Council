@@ -4,6 +4,7 @@ import { isAbility } from '../shared/meshy';
 import { cleanModelRef, isKeyId, isVendorId, KeyId, VendorId } from '../shared/vendors';
 import { ingestAttachments, normalizeRepoUrl, validateAvatar } from './attachments';
 import { createBackup, listBackups, restoreBackup } from './backup';
+import type { OllamaManager } from './ollama';
 import { Orchestrator } from './orchestrator';
 import { assertProjectPathAllowed, validateProjectPath } from './project';
 import { NewAgent, Store } from './store';
@@ -12,6 +13,8 @@ import { listFiles, readVaultFile, refreshIndexes, resolveVaultPath, validateVau
 export interface ApiContext {
   store: Store;
   orch: Orchestrator;
+  /** The Local models manager (Ollama). */
+  ollama: OllamaManager;
   defaultVaultRoot: string;
   pickFolder(): Promise<string | null>;
   setApiKey(key: string, vendor: KeyId): void;
@@ -188,10 +191,28 @@ export function createApi(c: ApiContext) {
       const p = obj(patch);
       store.updateSettings(p as never);
       c.refreshMode();
+      return true; // callers use the result to know it was accepted
     },
     setApiKey: (key: unknown, vendor?: unknown) => { c.setApiKey(str(key).trim(), keyArg(vendor)); c.refreshMode(); return true; },
     clearApiKey: (vendor?: unknown) => { c.clearApiKey(keyArg(vendor)); c.refreshMode(); return true; },
     listVendorModels: (vendor: unknown) => c.listModels(vendorArg(vendor)),
+
+    // ---- Local models (Ollama). Each of these starts from a click in the Local models popup. ----
+    ollamaState: () => c.ollama.state(),
+    ollamaRescan: () => c.ollama.rescan(),
+    ollamaUse: (dir: unknown) => c.ollama.use(dir),
+    ollamaForget: () => c.ollama.forget(),
+    ollamaStart: () => c.ollama.start(),
+    ollamaStop: () => c.ollama.stop(),
+    ollamaPull: (name: unknown) => c.ollama.pull(name),
+    ollamaCancelPull: () => c.ollama.cancelPull(),
+    ollamaClearPull: () => c.ollama.clearPull(),
+    ollamaDeleteModel: (name: unknown) => c.ollama.deleteModel(name),
+    ollamaCheckUpdate: () => c.ollama.checkUpdate(),
+    ollamaPrepare: (action: unknown, args?: unknown) => c.ollama.prepare(action, args),
+    ollamaConfirm: (token: unknown, options?: unknown) => c.ollama.confirm(token, options),
+    ollamaRunInstaller: () => c.ollama.runInstaller(),
+    ollamaCancelWait: () => c.ollama.cancelWait(),
 
     pickFolder: () => c.pickFolder(),
 
