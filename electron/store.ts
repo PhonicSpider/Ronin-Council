@@ -493,7 +493,7 @@ export class Store {
   }
 
   // ---------- settings / spend ----------
-  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys' | 'hasMeshyKey' | 'ollamaPath'>>) {
+  updateSettings(patch: Partial<Omit<Settings, 'hasApiKey' | 'vendorKeys' | 'hasMeshyKey' | 'ollamaPath' | 'ollamaBrowsedPath'>>) {
     const s = this.data.settings;
     if (patch.vendorUrls) {
       // Only the vendors whose address is the user's to set; a hosted vendor's address is fixed so its key cannot be redirected.
@@ -541,6 +541,13 @@ export class Store {
     this.changed();
   }
   /** The Ollama folder the user confirmed. Set by the app after checking it; never taken from the renderer's settings patch. */
+  /** The Ollama folder the user browsed to. Set by the app after checking it and asking; never taken from the renderer's settings patch. */
+  setOllamaBrowsedPath(dir: string) {
+    if (typeof dir !== 'string' || (dir !== '' && !/^[A-Za-z]:[\\/]/.test(dir))) throw new Error('Invalid folder');
+    if (this.data.settings.ollamaBrowsedPath === dir) return;
+    this.data.settings.ollamaBrowsedPath = dir;
+    this.changed();
+  }
   setOllamaPath(dir: string) {
     if (typeof dir !== 'string' || (dir !== '' && !/^[A-Za-z]:[\\/]/.test(dir))) throw new Error('Invalid folder');
     if (this.data.settings.ollamaPath === dir) return;

@@ -104,6 +104,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hasMeshyKey: false,
   meshyDailyCredits: 100,
   ollamaPath: '',
+  ollamaBrowsedPath: '',
   ollamaAutoStart: false,
 };
 

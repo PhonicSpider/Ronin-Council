@@ -777,7 +777,10 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       const hardware = await waitFor(`__t.tid('lm-hardware') && /RAM/.test(__t.tid('lm-hardware').textContent)`, 15000);
       const rows = await js<number>(`__t.all('lm-catalog-row').length`);
       const badges = await js<number>(`document.querySelectorAll('.fit').length`);
-      const hasCheck = await js<boolean>(`!!__t.tid('lm-check') && !!__t.tid('lm-rescan')`);
+      const hasCheck = await js<boolean>(`!!__t.tid('lm-check') && !!__t.tid('lm-rescan') && !!__t.tid('lm-browse')`);
+      // the warning and "Add by name" come before the list, and rows no longer carry a "can use tools" tag
+      const notesFirst = await js<boolean>(`(() => { const n = __t.tid('lm-notes'), a = __t.tid('lm-add-name'), r = __t.all('lm-catalog-row')[0]; const before = (x, y) => !!(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING); return !!n && !!a && !!r && before(n, a) && before(a, r) && /Models can use tools unless/.test(n.textContent); })()`);
+      const noToolTag = await js<boolean>(`!__t.all('lm-catalog-row').some((r) => /can use tools/.test(r.textContent))`);
       const running = await js<boolean>(`!!__t.tid('lm-server-state') && /Running/.test(__t.tid('lm-server-state').textContent)`);
       const downloadsGated = running || (await js<boolean>(`__t.all('lm-download').every((b) => b.disabled)`));
       await shot('29-local-models');
@@ -792,8 +795,8 @@ export async function runSelfTest(win: BrowserWindow, store: Store, outDir: stri
       await js(`__t.tid('lm-close').click()`);
       const closed = await waitFor(`!__t.tid('local-models')`, 3000);
       check('Local models opens, finishes the drive scan, shows hardware, a badge on every listed model, gated downloads, a working autostart switch, and closes',
-        open && scanned && hardware && rows === CATALOG.length && badges >= rows && hasCheck && downloadsGated && flipped && restored && closed,
-        { open, scanned, hardware, rows, badges, hasCheck, downloadsGated, flipped, restored, closed });
+        open && scanned && hardware && rows === CATALOG.length && badges >= rows && hasCheck && notesFirst && noToolTag && downloadsGated && flipped && restored && closed,
+        { open, scanned, hardware, rows, badges, hasCheck, notesFirst, noToolTag, downloadsGated, flipped, restored, closed });
     });
   } catch (e) {
     check('self-test aborted', false, (e as Error).message);

@@ -221,13 +221,16 @@ describe('OllamaManager', () => {
   let ghDownloads: string[] = [];
   let confirms: { title: string; message: string; detail: string; ok: string }[] = [];
   let confirmAnswer = true;
+  let browsed = '';
+  let pickAnswer: string | null = null;
   let downloadHandler: (req: http.IncomingMessage, res: http.ServerResponse) => void;
 
   const p = (...x: string[]) => path.join(tmp, ...x);
   const touchExe = (dir: string) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'ollama.exe'), 'MZ'); };
   const mk = (over: any = {}) => new OllamaManager({
     sys, downloadDir: p('downloads'), origin: () => `http://127.0.0.1:${port}`,
-    getSavedDir: () => saved, setSavedDir: (d) => { saved = d; }, addressSaved: () => false,
+    getSavedDir: () => saved, setSavedDir: (d) => { saved = d; },
+    getBrowsedDir: () => browsed, setBrowsedDir: (d) => { browsed = d; }, pickExe: async () => pickAnswer, addressSaved: () => false,
     localAgents: () => agentsLocal, resetAgent: (id) => { reset.push(id); },
     protectedDirs: [p('userdata')], home: p('home'), localAppData: p('c', 'Users', 'me', 'AppData', 'Local'),
     now: () => Date.now() + skew,
@@ -260,7 +263,7 @@ describe('OllamaManager', () => {
     ollama = new FakeOllama(port);
     sys = new FakeSys(ollama);
     sys.drives = [p('c'), p('d')];
-    saved = ''; agentsLocal = []; reset = []; skew = 0; ghDownloads = []; confirms = []; confirmAnswer = true;
+    saved = ''; agentsLocal = []; reset = []; skew = 0; ghDownloads = []; confirms = []; confirmAnswer = true; browsed = ''; pickAnswer = null;
     releaseJson = {
       tag_name: GITHUB_TAG,
       assets: [{ name: 'OllamaSetup.exe', size: installerBytes.length, digest: `sha256:${crypto.createHash('sha256').update(installerBytes).digest('hex')}`, browser_download_url: `http://127.0.0.1:${ghPort}/dl/OllamaSetup.exe` }],
@@ -376,6 +379,85 @@ describe('OllamaManager', () => {
       expect(st.candidates.map((c) => c.sources[0]).sort()).toEqual(['path', 'process']);
       await expect(mgr.stop()).resolves.toBe(true); // nothing running that we know of, and nothing killed
       expect(sys.killed).toEqual([]);
+    });
+
+    describe('browsing to ollama.exe', () => {
+      it('does nothing when the picker is cancelled', async () => {
+        await mgr.detect();
+        pickAnswer = null;
+        await expect(mgr.browse()).resolves.toBe(false);
+        expect(browsed).toBe('');
+        expect(confirms).toEqual([]);
+      });
+
+      it('uses a copy anywhere, after a native confirmation, remembers it, and runs it', async () => {
+        const odd = p('d', 'random', 'deep', 'folder', 'bin');
+        touchExe(odd);
+        await mgr.detect();
+        expect((await mgr.state()).install).toBeNull(); // the scan would never have found this one
+        pickAnswer = path.join(odd, 'ollama.exe');
+        await expect(mgr.browse()).resolves.toBe(true);
+        expect(confirms).toHaveLength(1);
+        expect(confirms[0].message).toContain(odd);
+        expect(browsed).toBe(odd);
+        const st = await mgr.state();
+        expect(st.install).toMatchObject({ dir: odd, trusted: true });
+        expect(st.install?.sources).toContain('manual');
+        await mgr.start();
+        expect(sys.started).toEqual([path.join(odd, 'ollama.exe')]);
+      });
+
+      it('is remembered across restarts and beats the default folder', async () => {
+        touchExe(defaultDir());
+        const odd = p('d', 'mine'); touchExe(odd);
+        pickAnswer = path.join(odd, 'ollama.exe');
+        await mgr.detect();
+        await mgr.browse();
+        const again = mk(); // a new run of the app reads the saved choice
+        await again.detect();
+        expect((await again.state()).install?.dir).toBe(odd);
+      });
+
+      it('forgetting the choice goes back to what the system says', async () => {
+        touchExe(defaultDir());
+        const odd = p('d', 'mine'); touchExe(odd);
+        pickAnswer = path.join(odd, 'ollama.exe');
+        await mgr.detect();
+        await mgr.browse();
+        mgr.forget();
+        expect(browsed).toBe('');
+        expect((await mgr.state()).install?.dir).toBe(defaultDir());
+      });
+
+      it('saves nothing if the user declines the native question', async () => {
+        const odd = p('d', 'mine'); touchExe(odd);
+        pickAnswer = path.join(odd, 'ollama.exe');
+        await mgr.detect();
+        confirmAnswer = false;
+        await expect(mgr.browse()).rejects.toThrow(/Cancelled/);
+        expect(browsed).toBe('');
+        expect((await mgr.state()).install).toBeNull();
+      });
+
+      it('refuses anything that is not a real ollama.exe on a local drive', async () => {
+        await mgr.detect();
+        const other = p('d', 'x'); fs.mkdirSync(other, { recursive: true });
+        fs.writeFileSync(path.join(other, 'notepad.exe'), 'MZ');
+        fs.mkdirSync(path.join(other, 'sub', 'ollama.exe'), { recursive: true }); // a folder with that name
+        const real = path.join(other, 'real.exe'); fs.writeFileSync(real, 'MZ');
+        const cases = [path.join(other, 'notepad.exe'), 'ollama.exe', 'D:\\nothing\\ollama.exe', '\\\\server\\share\\ollama.exe', path.join(other, 'sub', 'ollama.exe'), path.join(other, 'missing', 'ollama.exe'), 5 as any];
+        for (const c of cases) {
+          pickAnswer = c;
+          await expect(mgr.browse()).rejects.toThrow();
+        }
+        try { // a link named ollama.exe
+          fs.symlinkSync(real, path.join(other, 'ollama.exe'), 'file');
+          pickAnswer = path.join(other, 'ollama.exe');
+          await expect(mgr.browse()).rejects.toThrow(/not a program file/);
+        } catch (e) { if (!/not a program file|EPERM|EACCES/.test(String((e as Error).message))) throw e; }
+        expect(browsed).toBe('');
+        expect(confirms).toEqual([]);
+      });
     });
 
     it('ignores a saved folder that nothing else points at (it could have been written into the settings by anything)', async () => {

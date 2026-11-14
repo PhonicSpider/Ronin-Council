@@ -141,7 +141,7 @@ export const catalogEntry = (name: string): CatalogEntry | undefined => CATALOG.
 
 // ---------- what the popup shows ----------
 
-export type InstallSource = 'registry' | 'default' | 'saved' | 'process' | 'path' | 'scan';
+export type InstallSource = 'registry' | 'default' | 'saved' | 'manual' | 'process' | 'path' | 'scan';
 
 export interface OllamaInstall {
   dir: string;

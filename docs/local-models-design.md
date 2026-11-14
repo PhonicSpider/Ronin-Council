@@ -32,7 +32,7 @@ resource.
 2. A running `ollama.exe` / `ollama app.exe` and its path.
 3. The PATH, and the default folder `%LOCALAPPDATA%\Programs\Ollama`.
 4. A bounded scan of every fixed drive: well-known folder names (`Ollama`, `Program Files\Ollama`, `Programs\Ollama`, `Apps\Ollama`) and a two-level listing of each drive for a folder called "ollama". Skips Windows, Recycle Bin, node_modules, reparse points.
-5. A path the user picks by hand.
+5. A path the user picks by hand ("Browse to ollama.exe"). The file picker is opened by the main process, so the page never supplies a path; the file must be named ollama.exe, be a real file (not a link) on a local drive, and the user confirms in a native dialog. The choice is remembered and takes priority.
 
 Sources 1 to 3 are trusted. A hit from 4 or 5 is shown as "Found at ..." and needs the user's click ("Use this one") before the app
 will ever run it. The chosen folder is saved. A saved folder is re-checked every time (file exists, still named ollama.exe).

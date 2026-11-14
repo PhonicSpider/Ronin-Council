@@ -151,6 +151,8 @@ export interface Settings {
   meshyDailyCredits: number;
   /** The Ollama folder the user confirmed (empty = none). */
   ollamaPath: string;
+  /** A copy the user browsed to with the file picker (empty = none). */
+  ollamaBrowsedPath: string;
   /** Start Ollama when the app opens, if an agent uses a local model. */
   ollamaAutoStart: boolean;
 }

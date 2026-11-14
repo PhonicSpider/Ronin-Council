@@ -284,3 +284,4 @@ label.inline { flex-direction: row; justify-content: space-between; align-items:
 .crash { padding: 40px; }
 .crash pre { background: var(--bg0); padding: 12px; border-radius: 6px; white-space: pre-wrap; }
 .lm-head .icon-btn.close { flex: none; width: 34px; }
+.lm-notes p { margin: 0 0 6px; }

@@ -201,6 +201,7 @@ export function createApi(c: ApiContext) {
     ollamaState: () => c.ollama.state(),
     ollamaRescan: () => c.ollama.rescan(),
     ollamaUse: (dir: unknown) => c.ollama.use(dir),
+    ollamaBrowse: () => c.ollama.browse(),
     ollamaForget: () => c.ollama.forget(),
     ollamaStart: () => c.ollama.start(),
     ollamaStop: () => c.ollama.stop(),

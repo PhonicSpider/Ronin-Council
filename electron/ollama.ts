@@ -52,6 +52,11 @@ export interface OllamaDeps {
   origin: () => string;
   getSavedDir: () => string;
   setSavedDir: (dir: string) => void;
+  /** A copy the user browsed to with the file picker. */
+  getBrowsedDir: () => string;
+  setBrowsedDir: (dir: string) => void;
+  /** Opens the system file picker (shown by the main process) and returns the chosen file, or null if cancelled. */
+  pickExe: () => Promise<string | null>;
   addressSaved: () => boolean;
   localAgents: () => { id: string; name: string }[];
   resetAgent: (id: string) => void;
@@ -72,7 +77,7 @@ export interface OllamaDeps {
 
 const EXE = 'ollama.exe';
 const PROC_NAMES = ['ollama.exe', 'ollama app.exe'];
-const TRUSTED: InstallSource[] = ['registry', 'default', 'saved'];
+const TRUSTED: InstallSource[] = ['registry', 'default', 'saved', 'manual'];
 const RELEASE_API = 'https://api.github.com/repos/ollama/ollama/releases/latest';
 const SKIP_DIRS = new Set(['windows', '$recycle.bin', 'system volume information', 'node_modules', '$windows.~bt', 'recovery', 'config.msi']);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -295,6 +300,8 @@ export class OllamaManager {
     await add(path.join(this.d.localAppData, 'Programs', 'Ollama'), 'default');
     const saved = this.d.getSavedDir();
     if (saved) await add(saved, 'saved');
+    const browsed = this.d.getBrowsedDir();
+    if (browsed) await add(browsed, 'manual');
     for (const p of await safe(() => this.d.sys.processes(), [])) if (p.exePath) await add(path.dirname(p.exePath), 'process');
     for (const dir of this.d.sys.pathDirs()) await add(dir, 'path');
     const roots = await safe(() => this.d.sys.fixedDrives(), []);
@@ -351,7 +358,7 @@ export class OllamaManager {
 
   private pick(): Found | null {
     const ok = (s: InstallSource) => (f: Found) => f.sources.has(s);
-    for (const s of ['saved', 'registry', 'default'] as InstallSource[]) { const f = this.found.find(ok(s)); if (f) return f; }
+    for (const s of ['manual', 'saved', 'registry', 'default'] as InstallSource[]) { const f = this.found.find(ok(s)); if (f) return f; }
     return null;
   }
 
@@ -380,6 +387,35 @@ export class OllamaManager {
     return true;
   }
 
+  /**
+   * The user points at ollama.exe themselves. The file picker is opened by the main process, so the page never supplies a path.
+   * The choice is checked, confirmed in a native dialog, remembered, and used from then on.
+   */
+  async browse(): Promise<boolean> {
+    this.guard();
+    const picked = await this.d.pickExe();
+    if (!picked) return false; // cancelled in the picker
+    if (typeof picked !== 'string' || !path.isAbsolute(picked) || !/^[A-Za-z]:[\\/]/.test(picked) || path.basename(picked).toLowerCase() !== EXE) {
+      throw new Error('Choose the file named ollama.exe on a local drive.');
+    }
+    if (!(await isRealFile(picked))) throw new Error('That is not a program file (it may be a shortcut or link).');
+    const dir = path.dirname(path.resolve(picked));
+    const ok = await this.d.confirmNative({
+      title: 'Use this copy of Ollama?', ok: 'Use it',
+      message: `Use the copy of Ollama in ${dir}?`,
+      detail: 'When you press Start, this app will run ollama.exe from that folder. Only choose a copy you recognise.',
+    });
+    if (!ok) throw new Error('Cancelled.');
+    this.d.setBrowsedDir(dir);
+    const key = lc(dir);
+    const existing = this.found.find((f) => lc(f.dir) === key);
+    if (existing) existing.sources.add('manual');
+    else this.found.push({ dir, sources: new Set<InstallSource>(['manual']), entryVersion: null, uninstall: null });
+    this.versions.delete(key);
+    this.scanned = true;
+    return true;
+  }
+
   /** Looks again in the background; the popup follows through state(). */
   rescan(): boolean { this.scanned = false; void this.detect().catch(() => { this.scanned = true; }); return true; }
 
@@ -389,7 +425,8 @@ export class OllamaManager {
   /** Forget the chosen folder (the app then falls back to what the uninstall list and default folder say). */
   forget(): boolean {
     this.d.setSavedDir('');
-    for (const f of this.found) f.sources.delete('saved');
+    this.d.setBrowsedDir('');
+    for (const f of this.found) { f.sources.delete('saved'); f.sources.delete('manual'); }
     this.found = this.found.filter((f) => f.sources.size > 0); // a copy known only by the saved choice is gone, not a "candidate"
     return true;
   }

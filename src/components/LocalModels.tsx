@@ -3,7 +3,7 @@ import { formatMemory, formatSize, type Fit, type InstallSource, type OllamaInst
 import { act, toast } from '../api';
 
 const SOURCE_LABEL: Record<InstallSource, string> = {
-  registry: 'listed in Windows Apps', default: 'in the default folder', saved: 'chosen by you',
+  registry: 'listed in Windows Apps', default: 'in the default folder', saved: 'chosen by you', manual: 'chosen by you (browsed)',
   process: 'running now', path: 'on your PATH', scan: 'found by the drive scan',
 };
 const LOCAL_ADDRESS = 'http://localhost:11434/v1';
@@ -154,7 +154,8 @@ export function LocalModels({ onClose }: { onClose: () => void }) {
             <button className="btn" disabled={busy} data-testid="lm-check" onClick={() => void run('ollamaCheckUpdate')}>{inst ? 'Check for update' : 'Check latest version'}</button>
             {inst && inst.uninstallable && <button className="btn danger" disabled={busy} data-testid="lm-uninstall" onClick={() => void ask('uninstall')}>Uninstall…</button>}
             <button className="btn" disabled={busy || !st.scanned} data-testid="lm-rescan" onClick={() => void run('ollamaRescan')}>Rescan drives</button>
-            {inst && inst.sources.includes('saved') && <button className="btn" disabled={busy} onClick={() => void run('ollamaForget')}>Forget this choice</button>}
+            <button className="btn" disabled={busy} data-testid="lm-browse" title="Pick ollama.exe yourself instead of scanning" onClick={() => void run('ollamaBrowse')}>Browse to ollama.exe…</button>
+            {inst && (inst.sources.includes('saved') || inst.sources.includes('manual')) && <button className="btn" disabled={busy} onClick={() => void run('ollamaForget')}>Forget this choice</button>}
           </div>
           {inst && !inst.uninstallable && <div className="muted small">Ollama has no uninstaller this app can run. Remove it from Windows Settings, Apps.</div>}
           {st.busy === 'uninstalling' && <div className="form-actions"><button className="btn" data-testid="lm-stop-waiting" onClick={() => void run('ollamaCancelWait')}>Stop waiting</button></div>}
@@ -248,6 +249,28 @@ export function LocalModels({ onClose }: { onClose: () => void }) {
 
           {/* ---------- download list ---------- */}
           <h3>Available models</h3>
+          <div className="lm-notes" data-testid="lm-notes">
+            <p className="muted small">
+              Sizes and tool support were read from Ollama's library on {st.catalogChecked}, and can change. Memory needs are estimates for a short context; longer conversations need more.
+              Some large models, such as Kimi, are cloud-only on Ollama, so they are not listed. The list below comes from Ollama's own library; "Add by name" downloads from Ollama's registry, which also holds models uploaded by other people, so only add names you trust.
+            </p>
+            <p className="muted small">
+              Models can use tools unless a row says otherwise. Agents start with tools off for local models; turn them on per model in the agent's profile.
+            </p>
+          </div>
+          <div className="field-row lm-add">
+            <label>Add by name
+              <input value={addName} placeholder="name:tag or namespace/name:tag" data-testid="lm-add-name" onChange={(e) => {
+                // Names are lowercase, but a tag may carry capitals (such as q4_K_M), so only the part before ":" is lowercased.
+                const v = e.target.value;
+                const i = v.indexOf(':');
+                setAddName(i < 0 ? v.toLowerCase() : v.slice(0, i).toLowerCase() + v.slice(i));
+              }} />
+            </label>
+            <div className="form-actions end">
+              <button className="btn" disabled={!running || pulling || busy || !addName.trim()} onClick={async () => { if (await run('ollamaPull', addName.trim())) setAddName(''); }}>Download</button>
+            </div>
+          </div>
           {pull && (
             <div className="lm-row" data-testid="lm-pull">
               <div className="lm-main">
@@ -266,7 +289,7 @@ export function LocalModels({ onClose }: { onClose: () => void }) {
               <div className="lm-main">
                 <strong>{c.label}</strong> <span className="muted small">{c.name}</span>
                 <div className="muted small">
-                  {formatSize(c.sizeBytes)} download · needs about {formatMemory(c.estBytes)} (estimate) · {c.tools ? 'can use tools' : 'no tool use'}{c.note ? ` · ${c.note}` : ''}
+                  {formatSize(c.sizeBytes)} download · needs about {formatMemory(c.estBytes)} (estimate){c.tools ? '' : ' · no tool use'}{c.note ? ` · ${c.note}` : ''}
                 </div>
               </div>
               <FitBadge fit={c.fit} />
@@ -276,23 +299,6 @@ export function LocalModels({ onClose }: { onClose: () => void }) {
               )}
             </div>
           ))}
-          <div className="field-row lm-add">
-            <label>Add by name
-              <input value={addName} placeholder="name:tag or namespace/name:tag" data-testid="lm-add-name" onChange={(e) => {
-                // Names are lowercase, but a tag may carry capitals (such as q4_K_M), so only the part before ":" is lowercased.
-                const v = e.target.value;
-                const i = v.indexOf(':');
-                setAddName(i < 0 ? v.toLowerCase() : v.slice(0, i).toLowerCase() + v.slice(i));
-              }} />
-            </label>
-            <div className="form-actions end">
-              <button className="btn" disabled={!running || pulling || busy || !addName.trim()} onClick={async () => { if (await run('ollamaPull', addName.trim())) setAddName(''); }}>Download</button>
-            </div>
-          </div>
-          <div className="muted small">
-            Sizes and tool support were read from Ollama's library on {st.catalogChecked}, and can change. Memory needs are estimates for a short context; longer conversations need more.
-            Some large models, such as Kimi, are cloud-only on Ollama, so they are not listed. The list above comes from Ollama's own library; "Add by name" downloads from Ollama's registry, which also holds models uploaded by other people, so only add names you trust.
-          </div>
 
           {/* ---------- agents ---------- */}
           <h3>Use with agents</h3>

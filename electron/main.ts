@@ -126,6 +126,13 @@ function start() {
     origin: () => OLLAMA_DEFAULT_ORIGIN.replace('localhost', '127.0.0.1'),
     getSavedDir: () => store.settings.ollamaPath,
     setSavedDir: (d) => store.setOllamaPath(d),
+    getBrowsedDir: () => store.settings.ollamaBrowsedPath,
+    setBrowsedDir: (d) => store.setOllamaBrowsedPath(d),
+    pickExe: async () => {
+      if (!win) return null;
+      const r = await dialog.showOpenDialog(win, { title: 'Find ollama.exe', properties: ['openFile'], filters: [{ name: 'Ollama (ollama.exe)', extensions: ['exe'] }] });
+      return r.canceled ? null : r.filePaths[0] ?? null;
+    },
     addressSaved: () => !!store.settings.vendorUrls.local,
     localAgents: () => store.agents().filter((a) => a.model?.vendor === 'local').map((a) => ({ id: a.id, name: a.name })),
     resetAgent: (id) => { store.updateAgent(id, { model: null }); },
